@@ -129,7 +129,7 @@ def load_data():
     data['6M_High'] = data['Close'].rolling(126).max()
     data['DrawdownPct'] = ((data['Close'] - data['6M_High']) / data['6M_High']) * 100
 
-    # Signal logic: RSI + VIX ONLY
+    # SIGNAL LOGIC: RSI + VIX ONLY
     data['Signal'] = "NONE"
     data.loc[(data['RSI'] < 50) & (data['VIX'] > 18), 'Signal'] = "LOW"
     data.loc[(data['RSI'] < 45) & (data['VIX'] > 20), 'Signal'] = "MEDIUM"
@@ -139,18 +139,18 @@ def load_data():
         return {"LOW": 400, "MEDIUM": 800, "HIGH": 1600}.get(signal, 0)
 
     data['Investment'] = data['Signal'].apply(investment)
+
     data = data.dropna().copy()
     data.index = pd.to_datetime(data.index)
 
     return data
 
 
-def build_recent_signal_strip(data, days=30):
+def build_recent_signal_timeline(data, days=30):
     recent = data.tail(days).copy()
-    signal_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
 
-    z = [recent["Signal"].map(signal_map).tolist()]
-    x = [format_full_date(d) for d in recent.index]
+    signal_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
+    recent["SignalNum"] = recent["Signal"].map(signal_map)
 
     colorscale = [
         [0.00, COLORS["NONE"]],
@@ -163,25 +163,79 @@ def build_recent_signal_strip(data, days=30):
         [1.00, COLORS["HIGH"]],
     ]
 
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=z,
-            x=x,
-            y=["Signal"],
+    x_dates = recent.index
+    hover_text = [
+        f"Date: {d.strftime('%d-%m-%Y')}<br>Signal: {s}"
+        for d, s in zip(recent.index, recent["Signal"])
+    ]
+
+    # bottom labels: show every 2nd day to reduce clutter
+    bottom_labels = [d.strftime("%d") if i % 2 == 0 else "" for i, d in enumerate(x_dates)]
+
+    # top labels: show month when it changes
+    top_tickvals = []
+    top_ticktext = []
+    prev_month = None
+
+    for d in x_dates:
+        month_label = d.strftime("%b %Y")
+        if month_label != prev_month:
+            top_tickvals.append(d)
+            top_ticktext.append(month_label)
+            prev_month = month_label
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Heatmap(
+            z=[recent["SignalNum"].tolist()],
+            x=x_dates,
+            y=[""],
             colorscale=colorscale,
             zmin=0,
             zmax=3,
             showscale=False,
-            hovertemplate="Date: %{x}<extra></extra>",
+            hoverongaps=False,
+            text=[hover_text],
+            hovertemplate="%{text}<extra></extra>",
         )
     )
 
     fig.update_layout(
-        height=130,
-        margin=dict(l=20, r=20, t=10, b=20),
-        xaxis_title="Recent Trading Days",
-        yaxis_showticklabels=False,
+        height=120,
+        margin=dict(l=10, r=10, t=25, b=30),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        xaxis=dict(
+            title="",
+            side="bottom",
+            tickmode="array",
+            tickvals=x_dates,
+            ticktext=bottom_labels,
+            tickangle=0,
+            showgrid=False,
+            zeroline=False,
+            showline=False,
+        ),
+        xaxis2=dict(
+            title="",
+            overlaying="x",
+            side="top",
+            tickmode="array",
+            tickvals=top_tickvals,
+            ticktext=top_ticktext,
+            showgrid=False,
+            zeroline=False,
+            showline=False,
+        ),
+        yaxis=dict(
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+            showline=False,
+        ),
     )
+
     return fig
 
 
@@ -208,11 +262,7 @@ def build_price_chart(data):
                 mode="markers",
                 name=signal,
                 marker=dict(size=9, color=COLORS[signal]),
-                hovertemplate=(
-                    "Date: %{x|%d-%m-%Y}<br>"
-                    "Price: %{y:.2f}<br>"
-                    f"Signal: {signal}<extra></extra>"
-                ),
+                hovertemplate="Date: %{x|%d-%m-%Y}<br>Price: %{y:.2f}<br>Signal: " + signal + "<extra></extra>",
             )
         )
 
@@ -369,7 +419,7 @@ def build_month_calendar_plot(month_df, year, month):
             y=[f"Week {i+1}" for i in range(len(z))][::-1],
             text=text[::-1],
             texttemplate="%{text}",
-            textfont={"size": 15, "color": "black"},
+            textfont={"size": 14, "color": "black"},
             colorscale=color_scale,
             zmin=0,
             zmax=3,
@@ -385,11 +435,12 @@ def build_month_calendar_plot(month_df, year, month):
         xaxis=dict(side="bottom"),
         yaxis=dict(showticklabels=False),
     )
+
     return fig
 
 
 # -----------------------
-# LOAD BASE DATA
+# LOAD DATA
 # -----------------------
 
 data = load_data()
@@ -420,11 +471,31 @@ with st.expander("Detailed explanation of today's signal and indicators"):
     st.markdown(detailed_explanation(latest))
 
 # -----------------------
-# RECENT SIGNAL STRIP
+# RECENT SIGNAL TIMELINE
 # -----------------------
 
 st.subheader("Recent Signal Timeline")
-st.plotly_chart(build_recent_signal_strip(data, 30), use_container_width=True)
+st.caption("Daily signal ribbon for the most recent 30 trading days.")
+
+legend_cols = st.columns(4)
+legend_cols[0].markdown(
+    f"<div style='background:{COLORS['NONE']};padding:6px;border-radius:6px;text-align:center;'>NONE</div>",
+    unsafe_allow_html=True
+)
+legend_cols[1].markdown(
+    f"<div style='background:{COLORS['LOW']};padding:6px;border-radius:6px;text-align:center;'>LOW</div>",
+    unsafe_allow_html=True
+)
+legend_cols[2].markdown(
+    f"<div style='background:{COLORS['MEDIUM']};padding:6px;border-radius:6px;text-align:center;'>MEDIUM</div>",
+    unsafe_allow_html=True
+)
+legend_cols[3].markdown(
+    f"<div style='background:{COLORS['HIGH']};padding:6px;border-radius:6px;text-align:center;color:white;'>HIGH</div>",
+    unsafe_allow_html=True
+)
+
+st.plotly_chart(build_recent_signal_timeline(data, 30), use_container_width=True)
 
 # -----------------------
 # SIGNAL SUMMARY
@@ -506,7 +577,7 @@ with st.expander("Signal Calendar", expanded=False):
                     st.plotly_chart(build_month_calendar_plot(month_df, year, month), use_container_width=True)
 
 # -----------------------
-# TABLES
+# HISTORY TABLES
 # -----------------------
 
 st.subheader("History")
