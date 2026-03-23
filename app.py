@@ -3,7 +3,6 @@ import pandas as pd
 import yfinance as yf
 import calendar
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="VDGR Investment Dashboard", layout="wide")
 
@@ -17,7 +16,7 @@ COLORS = {
     "LOW": "#ffd43b",       # yellow
     "MEDIUM": "#f59f00",    # orange
     "HIGH": "#e03131",      # red
-    "NONE": "#dee2e6",      # light grey
+    "NONE": "#f1f3f5",      # very light grey
     "price": "#1f77b4",     # blue
     "rsi": "#2b8a3e",       # green
     "vix": "#6f42c1",       # purple
@@ -25,11 +24,11 @@ COLORS = {
 }
 
 TIME_OPTIONS = {
-    "3 months": "3mo",
-    "6 months": "6mo",
-    "12 months": "12mo",
-    "24 months": "24mo",
-    "36 months": "36mo",
+    "3 months": 3,
+    "6 months": 6,
+    "12 months": 12,
+    "24 months": 24,
+    "36 months": 36,
 }
 
 # -----------------------
@@ -38,6 +37,14 @@ TIME_OPTIONS = {
 
 def format_full_date(dt_value):
     return pd.to_datetime(dt_value).strftime("%d-%m-%Y")
+
+
+def filter_months(data, months):
+    if data.empty:
+        return data
+    end_date = data.index.max()
+    start_date = end_date - pd.DateOffset(months=months)
+    return data[data.index >= start_date].copy()
 
 
 def signal_summary_text(row):
@@ -56,7 +63,6 @@ def signal_summary_text(row):
 
 
 def detailed_explanation(row):
-    signal = row["Signal"]
     rsi = row["RSI"]
     vix = row["VIX"]
     dd = row["DrawdownPct"]
@@ -92,9 +98,9 @@ def detailed_explanation(row):
 
 
 @st.cache_data(ttl=3600)
-def load_data(period):
-    vdgr = yf.download("VDGR.AX", period=period, auto_adjust=False)
-    vix = yf.download("^VIX", period=period, auto_adjust=False)
+def load_data():
+    vdgr = yf.download("VDGR.AX", period="36mo", auto_adjust=False)
+    vix = yf.download("^VIX", period="36mo", auto_adjust=False)
 
     if isinstance(vdgr.columns, pd.MultiIndex):
         vdgr.columns = vdgr.columns.get_level_values(0)
@@ -123,7 +129,7 @@ def load_data(period):
     data['6M_High'] = data['Close'].rolling(126).max()
     data['DrawdownPct'] = ((data['Close'] - data['6M_High']) / data['6M_High']) * 100
 
-    # SIGNAL LOGIC (RSI + VIX ONLY)
+    # Signal logic: RSI + VIX ONLY
     data['Signal'] = "NONE"
     data.loc[(data['RSI'] < 50) & (data['VIX'] > 18), 'Signal'] = "LOW"
     data.loc[(data['RSI'] < 45) & (data['VIX'] > 20), 'Signal'] = "MEDIUM"
@@ -133,33 +139,187 @@ def load_data(period):
         return {"LOW": 400, "MEDIUM": 800, "HIGH": 1600}.get(signal, 0)
 
     data['Investment'] = data['Signal'].apply(investment)
-
     data = data.dropna().copy()
     data.index = pd.to_datetime(data.index)
 
     return data
 
 
-def add_signal_markers(fig, data, y_col, row=1, col=1):
+def build_recent_signal_strip(data, days=30):
+    recent = data.tail(days).copy()
+    signal_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
+
+    z = [recent["Signal"].map(signal_map).tolist()]
+    x = [format_full_date(d) for d in recent.index]
+
+    colorscale = [
+        [0.00, COLORS["NONE"]],
+        [0.24, COLORS["NONE"]],
+        [0.25, COLORS["LOW"]],
+        [0.49, COLORS["LOW"]],
+        [0.50, COLORS["MEDIUM"]],
+        [0.74, COLORS["MEDIUM"]],
+        [0.75, COLORS["HIGH"]],
+        [1.00, COLORS["HIGH"]],
+    ]
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=z,
+            x=x,
+            y=["Signal"],
+            colorscale=colorscale,
+            zmin=0,
+            zmax=3,
+            showscale=False,
+            hovertemplate="Date: %{x}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        height=130,
+        margin=dict(l=20, r=20, t=10, b=20),
+        xaxis_title="Recent Trading Days",
+        yaxis_showticklabels=False,
+    )
+    return fig
+
+
+def build_price_chart(data):
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=data.index,
+            y=data["Close"],
+            mode="lines",
+            name="VDGR Price",
+            line=dict(color=COLORS["price"], width=2),
+            hovertemplate="Date: %{x|%d-%m-%Y}<br>Price: %{y:.2f}<extra></extra>",
+        )
+    )
+
     for signal in ["LOW", "MEDIUM", "HIGH"]:
         subset = data[data["Signal"] == signal]
         fig.add_trace(
             go.Scatter(
                 x=subset.index,
-                y=subset[y_col],
+                y=subset["Close"],
                 mode="markers",
                 name=signal,
-                marker=dict(size=8, color=COLORS[signal]),
+                marker=dict(size=9, color=COLORS[signal]),
                 hovertemplate=(
                     "Date: %{x|%d-%m-%Y}<br>"
-                    f"{y_col}: " + "%{y:.2f}<br>"
+                    "Price: %{y:.2f}<br>"
                     f"Signal: {signal}<extra></extra>"
                 ),
-                showlegend=True if row == 1 and col == 1 else False,
-            ),
-            row=row,
-            col=col,
+            )
         )
+
+    fig.update_layout(
+        height=500,
+        legend_title_text="Series",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        hovermode="x unified",
+    )
+    return fig
+
+
+def build_rsi_chart(data):
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=data.index,
+            y=data["RSI"],
+            mode="lines",
+            name="RSI",
+            line=dict(color=COLORS["rsi"], width=2),
+            hovertemplate="Date: %{x|%d-%m-%Y}<br>RSI: %{y:.2f}<extra></extra>",
+        )
+    )
+
+    for y_val, name, color, dash in [
+        (50, "LOW threshold (50)", COLORS["LOW"], "dash"),
+        (45, "MEDIUM threshold (45)", COLORS["MEDIUM"], "dash"),
+        (35, "HIGH threshold (35)", COLORS["HIGH"], "dash"),
+        (70, "Overbought reference (70)", "#868e96", "dot"),
+        (30, "Oversold reference (30)", "#868e96", "dot"),
+    ]:
+        fig.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="top left")
+
+    fig.update_layout(
+        height=400,
+        xaxis_title="Date",
+        yaxis_title="RSI",
+        showlegend=True,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def build_vix_chart(data):
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=data.index,
+            y=data["VIX"],
+            mode="lines",
+            name="VIX",
+            line=dict(color=COLORS["vix"], width=2),
+            hovertemplate="Date: %{x|%d-%m-%Y}<br>VIX: %{y:.2f}<extra></extra>",
+        )
+    )
+
+    for y_val, name, color, dash in [
+        (18, "LOW threshold (18)", COLORS["LOW"], "dash"),
+        (20, "MEDIUM threshold (20)", COLORS["MEDIUM"], "dash"),
+        (25, "HIGH threshold (25)", COLORS["HIGH"], "dash"),
+        (30, "Stress reference (30)", "#495057", "dot"),
+    ]:
+        fig.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="top left")
+
+    fig.update_layout(
+        height=400,
+        xaxis_title="Date",
+        yaxis_title="VIX",
+        showlegend=True,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def build_drawdown_chart(data):
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=data.index,
+            y=data["DrawdownPct"],
+            mode="lines",
+            name="Drawdown %",
+            line=dict(color=COLORS["drawdown"], width=2),
+            hovertemplate="Date: %{x|%d-%m-%Y}<br>Drawdown: %{y:.2f}%<extra></extra>",
+        )
+    )
+
+    for y_val, name, color, dash in [
+        (-5, "-5% reference", COLORS["LOW"], "dash"),
+        (-10, "-10% reference", COLORS["MEDIUM"], "dash"),
+        (-15, "-15% reference", COLORS["HIGH"], "dash"),
+    ]:
+        fig.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="bottom left")
+
+    fig.update_layout(
+        height=400,
+        xaxis_title="Date",
+        yaxis_title="Drawdown %",
+        showlegend=True,
+        hovermode="x unified",
+    )
+    return fig
 
 
 def build_month_calendar_plot(month_df, year, month):
@@ -204,12 +364,12 @@ def build_month_calendar_plot(month_df, year, month):
 
     fig.add_trace(
         go.Heatmap(
-            z=z,
+            z=z[::-1],
             x=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
             y=[f"Week {i+1}" for i in range(len(z))][::-1],
             text=text[::-1],
             texttemplate="%{text}",
-            textfont={"size": 16, "color": "black"},
+            textfont={"size": 15, "color": "black"},
             colorscale=color_scale,
             zmin=0,
             zmax=3,
@@ -220,27 +380,19 @@ def build_month_calendar_plot(month_df, year, month):
     )
 
     fig.update_layout(
-        height=260,
-        margin=dict(l=20, r=20, t=10, b=10),
+        height=210,
+        margin=dict(l=10, r=10, t=0, b=0),
         xaxis=dict(side="bottom"),
         yaxis=dict(showticklabels=False),
     )
-
     return fig
 
 
 # -----------------------
-# CONTROLS
+# LOAD BASE DATA
 # -----------------------
 
-range_label = st.selectbox(
-    "Select time range",
-    list(TIME_OPTIONS.keys()),
-    index=2,
-)
-
-period = TIME_OPTIONS[range_label]
-data = load_data(period)
+data = load_data()
 
 if data.empty:
     st.error("No data available.")
@@ -268,215 +420,112 @@ with st.expander("Detailed explanation of today's signal and indicators"):
     st.markdown(detailed_explanation(latest))
 
 # -----------------------
+# RECENT SIGNAL STRIP
+# -----------------------
+
+st.subheader("Recent Signal Timeline")
+st.plotly_chart(build_recent_signal_strip(data, 30), use_container_width=True)
+
+# -----------------------
 # SIGNAL SUMMARY
 # -----------------------
 
 st.subheader("Signal Summary")
+signal_counts_12m = filter_months(data, 12)['Signal'].value_counts()
 
-signal_counts = data['Signal'].value_counts()
 c1, c2, c3 = st.columns(3)
-c1.metric("LOW Signals", int(signal_counts.get("LOW", 0)))
-c2.metric("MEDIUM Signals", int(signal_counts.get("MEDIUM", 0)))
-c3.metric("HIGH Signals", int(signal_counts.get("HIGH", 0)))
-
-# -----------------------
-# CALENDAR
-# -----------------------
-
-st.subheader("12-Month Signal Calendar")
-st.caption("Calendar-style view of historical daily signals. Latest month shown first.")
-
-calendar_df = data.copy().reset_index().rename(columns={"index": "Date"})
-calendar_df["Date"] = pd.to_datetime(calendar_df["Date"])
-calendar_df["YearMonth"] = calendar_df["Date"].dt.to_period("M")
-
-month_periods = sorted(calendar_df["YearMonth"].unique(), reverse=True)
-
-if period in ["3mo", "6mo", "12mo"]:
-    legend_cols = st.columns(4)
-    legend_cols[0].markdown(f"<div style='background:{COLORS['NONE']};padding:10px;border-radius:6px;text-align:center;'>NONE</div>", unsafe_allow_html=True)
-    legend_cols[1].markdown(f"<div style='background:{COLORS['LOW']};padding:10px;border-radius:6px;text-align:center;'>LOW</div>", unsafe_allow_html=True)
-    legend_cols[2].markdown(f"<div style='background:{COLORS['MEDIUM']};padding:10px;border-radius:6px;text-align:center;'>MEDIUM</div>", unsafe_allow_html=True)
-    legend_cols[3].markdown(f"<div style='background:{COLORS['HIGH']};padding:10px;border-radius:6px;text-align:center;color:white;'>HIGH</div>", unsafe_allow_html=True)
-
-    for period_month in month_periods:
-        year = period_month.year
-        month = period_month.month
-        month_df = calendar_df[calendar_df["YearMonth"] == period_month].copy()
-
-        st.markdown(f"### {calendar.month_name[month]} {year}")
-        st.plotly_chart(build_month_calendar_plot(month_df, year, month), use_container_width=True)
-else:
-    st.info("Calendar view is shown for 12 months or less. Use the interactive charts below for longer time ranges.")
+c1.metric("LOW Signals (12m)", int(signal_counts_12m.get("LOW", 0)))
+c2.metric("MEDIUM Signals (12m)", int(signal_counts_12m.get("MEDIUM", 0)))
+c3.metric("HIGH Signals (12m)", int(signal_counts_12m.get("HIGH", 0)))
 
 # -----------------------
 # PRICE CHART
 # -----------------------
 
 st.subheader("VDGR Price with Signal Markers")
-
-fig_price = go.Figure()
-
-fig_price.add_trace(
-    go.Scatter(
-        x=data.index,
-        y=data["Close"],
-        mode="lines",
-        name="VDGR Price",
-        line=dict(color=COLORS["price"], width=2),
-        hovertemplate="Date: %{x|%d-%m-%Y}<br>Price: %{y:.2f}<extra></extra>",
-    )
-)
-
-for signal in ["LOW", "MEDIUM", "HIGH"]:
-    subset = data[data["Signal"] == signal]
-    fig_price.add_trace(
-        go.Scatter(
-            x=subset.index,
-            y=subset["Close"],
-            mode="markers",
-            name=signal,
-            marker=dict(size=9, color=COLORS[signal]),
-            hovertemplate=(
-                "Date: %{x|%d-%m-%Y}<br>"
-                "Price: %{y:.2f}<br>"
-                f"Signal: {signal}<extra></extra>"
-            ),
-        )
-    )
-
-fig_price.update_layout(
-    height=500,
-    legend_title_text="Series",
-    xaxis_title="Date",
-    yaxis_title="Price",
-    hovermode="x unified",
-)
-
-st.plotly_chart(fig_price, use_container_width=True)
+price_range = st.radio("Price chart range", list(TIME_OPTIONS.keys()), index=2, horizontal=True, key="price_range")
+price_data = filter_months(data, TIME_OPTIONS[price_range])
+st.plotly_chart(build_price_chart(price_data), use_container_width=True)
 
 # -----------------------
-# RSI CHART
+# INDICATORS
 # -----------------------
 
-st.subheader("RSI")
+st.subheader("Indicators")
 
-fig_rsi = go.Figure()
+tab_rsi, tab_vix, tab_dd = st.tabs(["RSI", "VIX", "Drawdown"])
 
-fig_rsi.add_trace(
-    go.Scatter(
-        x=data.index,
-        y=data["RSI"],
-        mode="lines",
-        name="RSI",
-        line=dict(color=COLORS["rsi"], width=2),
-        hovertemplate="Date: %{x|%d-%m-%Y}<br>RSI: %{y:.2f}<extra></extra>",
-    )
-)
+with tab_rsi:
+    rsi_range = st.radio("RSI range", ["3 months", "6 months", "12 months"], index=1, horizontal=True, key="rsi_range")
+    rsi_data = filter_months(data, TIME_OPTIONS[rsi_range])
+    st.plotly_chart(build_rsi_chart(rsi_data), use_container_width=True)
 
-for y_val, name, color, dash in [
-    (50, "LOW threshold (50)", COLORS["LOW"], "dash"),
-    (45, "MEDIUM threshold (45)", COLORS["MEDIUM"], "dash"),
-    (35, "HIGH threshold (35)", COLORS["HIGH"], "dash"),
-    (70, "Overbought reference (70)", "#868e96", "dot"),
-    (30, "Oversold reference (30)", "#868e96", "dot"),
-]:
-    fig_rsi.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="top left")
+with tab_vix:
+    vix_range = st.radio("VIX range", ["3 months", "6 months", "12 months"], index=1, horizontal=True, key="vix_range")
+    vix_data = filter_months(data, TIME_OPTIONS[vix_range])
+    st.plotly_chart(build_vix_chart(vix_data), use_container_width=True)
 
-fig_rsi.update_layout(
-    height=400,
-    xaxis_title="Date",
-    yaxis_title="RSI",
-    showlegend=True,
-    hovermode="x unified",
-)
-
-st.plotly_chart(fig_rsi, use_container_width=True)
+with tab_dd:
+    dd_range = st.radio("Drawdown range", ["6 months", "12 months", "24 months", "36 months"], index=1, horizontal=True, key="dd_range")
+    dd_data = filter_months(data, TIME_OPTIONS[dd_range])
+    st.plotly_chart(build_drawdown_chart(dd_data), use_container_width=True)
+    st.caption("Drawdown is displayed as extra context. It is not part of the alert rules for LOW / MEDIUM / HIGH signals.")
 
 # -----------------------
-# VIX CHART
+# CALENDAR
 # -----------------------
 
-st.subheader("VIX")
+with st.expander("Signal Calendar", expanded=False):
+    st.caption("Compact calendar-style view of historical daily signals. Latest month shown first.")
 
-fig_vix = go.Figure()
+    calendar_range = st.radio("Calendar range", ["3 months", "6 months", "12 months"], index=0, horizontal=True, key="calendar_range")
+    cal_data = filter_months(data, TIME_OPTIONS[calendar_range]).copy()
 
-fig_vix.add_trace(
-    go.Scatter(
-        x=data.index,
-        y=data["VIX"],
-        mode="lines",
-        name="VIX",
-        line=dict(color=COLORS["vix"], width=2),
-        hovertemplate="Date: %{x|%d-%m-%Y}<br>VIX: %{y:.2f}<extra></extra>",
-    )
-)
+    legend_cols = st.columns(4)
+    legend_cols[0].markdown(f"<div style='background:{COLORS['NONE']};padding:8px;border-radius:6px;text-align:center;'>NONE</div>", unsafe_allow_html=True)
+    legend_cols[1].markdown(f"<div style='background:{COLORS['LOW']};padding:8px;border-radius:6px;text-align:center;'>LOW</div>", unsafe_allow_html=True)
+    legend_cols[2].markdown(f"<div style='background:{COLORS['MEDIUM']};padding:8px;border-radius:6px;text-align:center;'>MEDIUM</div>", unsafe_allow_html=True)
+    legend_cols[3].markdown(f"<div style='background:{COLORS['HIGH']};padding:8px;border-radius:6px;text-align:center;color:white;'>HIGH</div>", unsafe_allow_html=True)
 
-for y_val, name, color, dash in [
-    (18, "LOW threshold (18)", COLORS["LOW"], "dash"),
-    (20, "MEDIUM threshold (20)", COLORS["MEDIUM"], "dash"),
-    (25, "HIGH threshold (25)", COLORS["HIGH"], "dash"),
-    (30, "Stress reference (30)", "#495057", "dot"),
-]:
-    fig_vix.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="top left")
+    calendar_df = cal_data.reset_index().rename(columns={"index": "Date"})
+    calendar_df["Date"] = pd.to_datetime(calendar_df["Date"])
+    calendar_df["YearMonth"] = calendar_df["Date"].dt.to_period("M")
+    month_periods = sorted(calendar_df["YearMonth"].unique(), reverse=True)
 
-fig_vix.update_layout(
-    height=400,
-    xaxis_title="Date",
-    yaxis_title="VIX",
-    showlegend=True,
-    hovermode="x unified",
-)
+    for i in range(0, len(month_periods), 2):
+        cols = st.columns(2)
+        for j in range(2):
+            if i + j < len(month_periods):
+                period_month = month_periods[i + j]
+                year = period_month.year
+                month = period_month.month
+                month_df = calendar_df[calendar_df["YearMonth"] == period_month].copy()
 
-st.plotly_chart(fig_vix, use_container_width=True)
+                with cols[j]:
+                    st.markdown(f"**{calendar.month_name[month]} {year}**")
+                    st.plotly_chart(build_month_calendar_plot(month_df, year, month), use_container_width=True)
 
 # -----------------------
-# DRAWDOWN CHART
+# TABLES
 # -----------------------
 
-st.subheader("Drawdown (Context Only)")
+st.subheader("History")
 
-fig_dd = go.Figure()
+history_tab1, history_tab2 = st.tabs(["Signal Days Only", "Full History"])
 
-fig_dd.add_trace(
-    go.Scatter(
-        x=data.index,
-        y=data["DrawdownPct"],
-        mode="lines",
-        name="Drawdown %",
-        line=dict(color=COLORS["drawdown"], width=2),
-        hovertemplate="Date: %{x|%d-%m-%Y}<br>Drawdown: %{y:.2f}%<extra></extra>",
-    )
-)
+table_base = data.reset_index().copy().rename(columns={"index": "Date"})
+table_base = table_base.sort_values("Date", ascending=False)
 
-for y_val, name, color, dash in [
-    (-5, "-5% reference", COLORS["LOW"], "dash"),
-    (-10, "-10% reference", COLORS["MEDIUM"], "dash"),
-    (-15, "-15% reference", COLORS["HIGH"], "dash"),
-]:
-    fig_dd.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="bottom left")
+with history_tab1:
+    signal_table = table_base[table_base["Signal"] != "NONE"].copy()
+    signal_table["Date"] = pd.to_datetime(signal_table["Date"]).dt.strftime("%d-%m-%Y")
+    signal_table = signal_table.rename(columns={"Close": "Price", "Investment": "Suggested Investment"})
+    signal_table = signal_table[['Date', 'Price', 'RSI', 'VIX', 'DrawdownPct', 'Signal', 'Suggested Investment']]
+    st.dataframe(signal_table, use_container_width=True)
 
-fig_dd.update_layout(
-    height=400,
-    xaxis_title="Date",
-    yaxis_title="Drawdown %",
-    showlegend=True,
-    hovermode="x unified",
-)
-
-st.plotly_chart(fig_dd, use_container_width=True)
-st.caption("Drawdown is displayed as extra context. It is not part of the alert rules for LOW / MEDIUM / HIGH signals.")
-
-# -----------------------
-# TABLE
-# -----------------------
-
-st.subheader("Recent Signals")
-
-table = data.reset_index().copy().rename(columns={"index": "Date"})
-table = table.sort_values("Date", ascending=False)
-table["Date"] = pd.to_datetime(table["Date"]).dt.strftime("%d-%m-%Y")
-table = table.rename(columns={"Close": "Price", "Investment": "Suggested Investment"})
-table = table[['Date', 'Price', 'RSI', 'VIX', 'DrawdownPct', 'Signal', 'Suggested Investment']]
-
-st.dataframe(table, use_container_width=True)
+with history_tab2:
+    full_table = table_base.copy()
+    full_table["Date"] = pd.to_datetime(full_table["Date"]).dt.strftime("%d-%m-%Y")
+    full_table = full_table.rename(columns={"Close": "Price", "Investment": "Suggested Investment"})
+    full_table = full_table[['Date', 'Price', 'RSI', 'VIX', 'DrawdownPct', 'Signal', 'Suggested Investment']]
+    st.dataframe(full_table, use_container_width=True)
