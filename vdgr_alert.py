@@ -1,50 +1,85 @@
+import os
+import requests
 import yfinance as yf
 import pandas as pd
-import requests
-from datetime import datetime
 
 # -----------------------
-# SETTINGS
+# CONFIG
 # -----------------------
 
-BOT_TOKEN = "bot8659012048:AAEmT5pTsl6C1qLJnDUWYTFH-HtD7XnVAf8"
-CHAT_ID = "7433669578"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 VDGR_TICKER = "VDGR.AX"
 VIX_TICKER = "^VIX"
 
 # -----------------------
-# TELEGRAM
+# HELPERS
 # -----------------------
 
-def send_telegram(message):
+def send_telegram(message: str) -> None:
+    if not BOT_TOKEN or not CHAT_ID:
+        raise ValueError("BOT_TOKEN and CHAT_ID must be set as environment variables or GitHub Secrets.")
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.get(url, params={"chat_id": CHAT_ID, "text": message})
+    response = requests.get(url, params={"chat_id": CHAT_ID, "text": message})
+
+    print("Telegram status:", response.status_code)
+    print("Telegram response:", response.text)
+
+    response.raise_for_status()
+
+
+def suggested_investment(signal: str) -> int:
+    if signal == "LOW":
+        return 400
+    if signal == "MEDIUM":
+        return 800
+    if signal == "HIGH":
+        return 1600
+    return 0
+
+
+def build_reason(signal: str, rsi: float, vix: float, drawdown: float) -> str:
+    reasons = []
+
+    if signal == "HIGH":
+        reasons.append(f"RSI {rsi:.1f} < 35")
+        reasons.append(f"VIX {vix:.1f} > 25")
+    elif signal == "MEDIUM":
+        reasons.append(f"RSI {rsi:.1f} < 45")
+        reasons.append(f"VIX {vix:.1f} > 20")
+    elif signal == "LOW":
+        reasons.append(f"RSI {rsi:.1f} < 50")
+        reasons.append(f"VIX {vix:.1f} > 18")
+    else:
+        reasons.append(f"No signal thresholds met (RSI={rsi:.1f}, VIX={vix:.1f})")
+
+    reasons.append(f"Drawdown context: {drawdown:.1f}%")
+
+    return " | ".join(reasons)
+
 
 # -----------------------
-# DOWNLOAD DATA
+# LOAD DATA
 # -----------------------
 
 print("Downloading market data...")
 
-vdgr = yf.download(VDGR_TICKER, period="2y", auto_adjust=False)
-vix = yf.download(VIX_TICKER, period="2y", auto_adjust=False)
+vdgr = yf.download(VDGR_TICKER, period="12mo", auto_adjust=False)
+vix = yf.download(VIX_TICKER, period="12mo", auto_adjust=False)
 
-# Flatten columns in case yfinance returns MultiIndex
+# Flatten MultiIndex columns if returned by yfinance
 if isinstance(vdgr.columns, pd.MultiIndex):
     vdgr.columns = vdgr.columns.get_level_values(0)
 
 if isinstance(vix.columns, pd.MultiIndex):
     vix.columns = vix.columns.get_level_values(0)
 
-# Keep only needed columns
 vdgr = vdgr[['Close']].copy()
 vix = vix[['Close']].copy()
-
-# Rename VIX close column
 vix.rename(columns={"Close": "VIX"}, inplace=True)
 
-# Join datasets
 data = vdgr.join(vix, how="inner")
 
 # -----------------------
@@ -62,61 +97,55 @@ rs = avg_gain / avg_loss
 data['RSI'] = 100 - (100 / (1 + rs))
 
 # -----------------------
-# ALERT LOGIC
+# CALCULATE DRAWDOWN (CONTEXT ONLY)
 # -----------------------
 
-data['Alert'] = None
-data.loc[(data['RSI'] < 50) & (data['VIX'] > 18), 'Alert'] = "LOW"
-data.loc[(data['RSI'] < 45) & (data['VIX'] > 20), 'Alert'] = "MEDIUM"
-data.loc[(data['RSI'] < 35) & (data['VIX'] > 25), 'Alert'] = "HIGH"
+data['6M_High'] = data['Close'].rolling(126).max()
+data['DrawdownPct'] = ((data['Close'] - data['6M_High']) / data['6M_High']) * 100
 
 # -----------------------
-# GET LATEST VALUES
+# SIGNAL LOGIC
+# RSI + VIX ONLY
+# -----------------------
+
+data['Signal'] = "NONE"
+data.loc[(data['RSI'] < 50) & (data['VIX'] > 18), 'Signal'] = "LOW"
+data.loc[(data['RSI'] < 45) & (data['VIX'] > 20), 'Signal'] = "MEDIUM"
+data.loc[(data['RSI'] < 35) & (data['VIX'] > 25), 'Signal'] = "HIGH"
+
+data = data.dropna(subset=['Close', 'RSI', 'VIX']).copy()
+
+# -----------------------
+# LATEST VALUES
 # -----------------------
 
 latest = data.iloc[-1]
 
-price = latest.at['Close']
-rsi_val = latest.at['RSI']
-vix_val = latest.at['VIX']
-alert = latest.at['Alert']
-
-# Force to plain Python numbers
-price = float(price) if pd.notna(price) else None
-rsi_val = float(rsi_val) if pd.notna(rsi_val) else None
-vix_val = float(vix_val) if pd.notna(vix_val) else None
-
-# -----------------------
-# SAVE TO CSV
-# -----------------------
-
-new_row = pd.DataFrame([{
-    "Date": datetime.today().strftime("%Y-%m-%d"),
-    "Price": price,
-    "RSI": rsi_val,
-    "VIX": vix_val,
-    "Alert": alert if pd.notna(alert) else ""
-}])
-
-try:
-    existing = pd.read_csv("data.csv")
-    updated = pd.concat([existing, new_row], ignore_index=True)
-except Exception:
-    updated = new_row
-
-updated.to_csv("data.csv", index=False)
+price = float(latest['Close'])
+rsi = float(latest['RSI'])
+vix_val = float(latest['VIX'])
+drawdown = float(latest['DrawdownPct']) if pd.notna(latest['DrawdownPct']) else 0.0
+signal = str(latest['Signal'])
+investment = suggested_investment(signal)
+reason = build_reason(signal, rsi, vix_val, drawdown)
+date_str = data.index[-1].strftime("%Y-%m-%d")
 
 # -----------------------
-# TELEGRAM ALERT
+# TELEGRAM MESSAGE
 # -----------------------
 
-if pd.notna(alert) and alert != "":
-    message = (
-        f"VDGR Alert: {alert}\n"
-        f"Price: {price:.2f}\n"
-        f"RSI: {rsi_val:.2f}\n"
-        f"VIX: {vix_val:.2f}"
-    )
-    send_telegram(message)
+message = (
+    f"VDGR Daily Update\n\n"
+    f"Date: {date_str}\n"
+    f"Signal: {signal}\n"
+    f"Price: ${price:.2f}\n"
+    f"RSI: {rsi:.2f}\n"
+    f"VIX: {vix_val:.2f}\n"
+    f"Drawdown: {drawdown:.2f}%\n"
+    f"Suggested Investment: ${investment}\n\n"
+    f"Why: {reason}"
+)
+
+send_telegram(message)
 
 print("Done.")
