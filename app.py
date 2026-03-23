@@ -130,20 +130,21 @@ def detailed_explanation(row):
 
 
 def build_calendar_heatmap(df):
-    df = df.copy().reset_index()
-    df['Date'] = pd.to_datetime(df['Date'])
-    df['YearMonth'] = df['Date'].dt.to_period('M')
+    cal_df = df.copy().reset_index()
+    cal_df['Date'] = pd.to_datetime(cal_df['Date'])
+    cal_df['YearMonth'] = cal_df['Date'].dt.to_period('M')
 
-    month_periods = sorted(df['YearMonth'].unique())
+    # Latest month first
+    month_periods = sorted(cal_df['YearMonth'].unique(), reverse=True)
 
     for period in month_periods:
-        month_df = df[df['YearMonth'] == period].copy()
+        month_df = cal_df[cal_df['YearMonth'] == period].copy()
         year = period.year
         month = period.month
 
         st.markdown(f"#### {calendar.month_name[month]} {year}")
 
-        cal = calendar.Calendar(firstweekday=0)  # Monday
+        cal = calendar.Calendar(firstweekday=0)
         month_days = cal.monthdatescalendar(year, month)
 
         fig, ax = plt.subplots(figsize=(10, 2.8))
@@ -164,11 +165,24 @@ def build_calendar_heatmap(df):
                         facecolor = COLORS.get(signal, COLORS["NONE"])
                     label = str(day.day)
 
-                rect = plt.Rectangle((day_idx, len(month_days)-1-week_idx), 1, 1,
-                                     facecolor=facecolor, edgecolor="white", linewidth=1.5)
+                rect = plt.Rectangle(
+                    (day_idx, len(month_days) - 1 - week_idx),
+                    1,
+                    1,
+                    facecolor=facecolor,
+                    edgecolor="white",
+                    linewidth=1.5
+                )
                 ax.add_patch(rect)
-                ax.text(day_idx + 0.5, len(month_days)-1-week_idx + 0.5, label,
-                        ha='center', va='center', fontsize=9, color="black")
+                ax.text(
+                    day_idx + 0.5,
+                    len(month_days) - 1 - week_idx + 0.5,
+                    label,
+                    ha='center',
+                    va='center',
+                    fontsize=9,
+                    color="black"
+                )
 
         ax.set_xlim(0, 7)
         ax.set_ylim(0, len(month_days))
@@ -177,6 +191,7 @@ def build_calendar_heatmap(df):
         ax.set_yticks([])
         ax.set_title(f"Signal Calendar - {calendar.month_name[month]} {year}", fontsize=11)
         ax.tick_params(axis='x', length=0)
+
         for spine in ax.spines.values():
             spine.set_visible(False)
 
@@ -232,7 +247,7 @@ c3.metric("HIGH Signals", int(signal_counts.get("HIGH", 0)))
 # -----------------------
 
 st.subheader("12-Month Signal Calendar")
-st.caption("Calendar-style view of historical daily signals across the previous 12 months.")
+st.caption("Calendar-style view of historical daily signals across the previous 12 months. Latest month shown first.")
 build_calendar_heatmap(data)
 
 # -----------------------
@@ -329,9 +344,14 @@ st.caption("Drawdown is displayed as extra context. It is not part of the alert 
 st.subheader("Recent Signals")
 
 table = data.reset_index().copy()
+
+# Sort by real datetime first, latest at top
+table = table.sort_values("Date", ascending=False)
+
+# Format only at the end for display
 table['Date'] = pd.to_datetime(table['Date']).dt.strftime("%d-%m-%Y")
+
 table = table.rename(columns={"Close": "Price", "Investment": "Suggested Investment"})
 table = table[['Date', 'Price', 'RSI', 'VIX', 'DrawdownPct', 'Signal', 'Suggested Investment']]
-table = table.sort_values("Date", ascending=False)
 
 st.dataframe(table, use_container_width=True)
