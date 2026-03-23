@@ -91,7 +91,6 @@ def investment(signal):
     return {"LOW": 400, "MEDIUM": 800, "HIGH": 1600}.get(signal, 0)
 
 data['Investment'] = data['Signal'].apply(investment)
-
 data = data.dropna(subset=['Close', 'RSI', 'VIX'])
 
 # -----------------------
