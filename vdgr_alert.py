@@ -65,6 +65,8 @@ def build_reason(signal: str, rsi: float, vix: float, drawdown: float) -> str:
 # -----------------------
 
 print("Downloading market data...")
+print("BOT_TOKEN exists:", BOT_TOKEN is not None)
+print("CHAT_ID exists:", CHAT_ID is not None)
 
 vdgr = yf.download(VDGR_TICKER, period="12mo", auto_adjust=False)
 vix = yf.download(VIX_TICKER, period="12mo", auto_adjust=False)
