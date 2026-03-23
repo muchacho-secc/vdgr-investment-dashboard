@@ -14,64 +14,37 @@ VDGR_TICKER = "VDGR.AX"
 VIX_TICKER = "^VIX"
 
 # -----------------------
-# HELPERS
+# TELEGRAM
 # -----------------------
 
-def send_telegram(message: str) -> None:
+def send_telegram(message: str):
     if not BOT_TOKEN or not CHAT_ID:
-        raise ValueError("BOT_TOKEN and CHAT_ID must be set as environment variables or GitHub Secrets.")
+        raise ValueError("BOT_TOKEN and CHAT_ID must be set.")
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    response = requests.get(url, params={"chat_id": CHAT_ID, "text": message})
+
+    response = requests.get(
+        url,
+        params={
+            "chat_id": CHAT_ID,
+            "text": message
+        }
+    )
 
     print("Telegram status:", response.status_code)
     print("Telegram response:", response.text)
 
     response.raise_for_status()
 
-
-def suggested_investment(signal: str) -> int:
-    if signal == "LOW":
-        return 400
-    if signal == "MEDIUM":
-        return 800
-    if signal == "HIGH":
-        return 1600
-    return 0
-
-
-def build_reason(signal: str, rsi: float, vix: float, drawdown: float) -> str:
-    reasons = []
-
-    if signal == "HIGH":
-        reasons.append(f"RSI {rsi:.1f} < 35")
-        reasons.append(f"VIX {vix:.1f} > 25")
-    elif signal == "MEDIUM":
-        reasons.append(f"RSI {rsi:.1f} < 45")
-        reasons.append(f"VIX {vix:.1f} > 20")
-    elif signal == "LOW":
-        reasons.append(f"RSI {rsi:.1f} < 50")
-        reasons.append(f"VIX {vix:.1f} > 18")
-    else:
-        reasons.append(f"No signal thresholds met (RSI={rsi:.1f}, VIX={vix:.1f})")
-
-    reasons.append(f"Drawdown context: {drawdown:.1f}%")
-
-    return " | ".join(reasons)
-
-
 # -----------------------
 # LOAD DATA
 # -----------------------
 
 print("Downloading market data...")
-print("BOT_TOKEN exists:", BOT_TOKEN is not None)
-print("CHAT_ID exists:", CHAT_ID is not None)
 
 vdgr = yf.download(VDGR_TICKER, period="12mo", auto_adjust=False)
 vix = yf.download(VIX_TICKER, period="12mo", auto_adjust=False)
 
-# Flatten MultiIndex columns if returned by yfinance
 if isinstance(vdgr.columns, pd.MultiIndex):
     vdgr.columns = vdgr.columns.get_level_values(0)
 
@@ -85,7 +58,7 @@ vix.rename(columns={"Close": "VIX"}, inplace=True)
 data = vdgr.join(vix, how="inner")
 
 # -----------------------
-# CALCULATE RSI
+# RSI
 # -----------------------
 
 delta = data['Close'].diff()
@@ -99,15 +72,14 @@ rs = avg_gain / avg_loss
 data['RSI'] = 100 - (100 / (1 + rs))
 
 # -----------------------
-# CALCULATE DRAWDOWN (CONTEXT ONLY)
+# DRAWDOWN (CONTEXT ONLY)
 # -----------------------
 
 data['6M_High'] = data['Close'].rolling(126).max()
 data['DrawdownPct'] = ((data['Close'] - data['6M_High']) / data['6M_High']) * 100
 
 # -----------------------
-# SIGNAL LOGIC
-# RSI + VIX ONLY
+# SIGNAL LOGIC (RSI + VIX ONLY)
 # -----------------------
 
 data['Signal'] = "NONE"
@@ -115,7 +87,12 @@ data.loc[(data['RSI'] < 50) & (data['VIX'] > 18), 'Signal'] = "LOW"
 data.loc[(data['RSI'] < 45) & (data['VIX'] > 20), 'Signal'] = "MEDIUM"
 data.loc[(data['RSI'] < 35) & (data['VIX'] > 25), 'Signal'] = "HIGH"
 
-data = data.dropna(subset=['Close', 'RSI', 'VIX']).copy()
+def investment(signal):
+    return {"LOW": 400, "MEDIUM": 800, "HIGH": 1600}.get(signal, 0)
+
+data['Investment'] = data['Signal'].apply(investment)
+
+data = data.dropna(subset=['Close', 'RSI', 'VIX'])
 
 # -----------------------
 # LATEST VALUES
@@ -126,14 +103,29 @@ latest = data.iloc[-1]
 price = float(latest['Close'])
 rsi = float(latest['RSI'])
 vix_val = float(latest['VIX'])
-drawdown = float(latest['DrawdownPct']) if pd.notna(latest['DrawdownPct']) else 0.0
-signal = str(latest['Signal'])
-investment = suggested_investment(signal)
-reason = build_reason(signal, rsi, vix_val, drawdown)
-date_str = data.index[-1].strftime("%Y-%m-%d")
+drawdown = float(latest['DrawdownPct']) if pd.notna(latest['DrawdownPct']) else 0
+signal = latest['Signal']
+investment_amt = investment(signal)
+date_str = data.index[-1].strftime("%d-%m-%Y")
 
 # -----------------------
-# TELEGRAM MESSAGE
+# EXPLANATION
+# -----------------------
+
+def build_reason(signal, rsi, vix):
+    if signal == "HIGH":
+        return f"RSI ({rsi:.1f}) < 35 and VIX ({vix:.1f}) > 25"
+    elif signal == "MEDIUM":
+        return f"RSI ({rsi:.1f}) < 45 and VIX ({vix:.1f}) > 20"
+    elif signal == "LOW":
+        return f"RSI ({rsi:.1f}) < 50 and VIX ({vix:.1f}) > 18"
+    else:
+        return f"No thresholds met (RSI {rsi:.1f}, VIX {vix:.1f})"
+
+reason = build_reason(signal, rsi, vix_val)
+
+# -----------------------
+# MESSAGE
 # -----------------------
 
 message = (
@@ -144,9 +136,14 @@ message = (
     f"RSI: {rsi:.2f}\n"
     f"VIX: {vix_val:.2f}\n"
     f"Drawdown: {drawdown:.2f}%\n"
-    f"Suggested Investment: ${investment}\n\n"
-    f"Why: {reason}"
+    f"Suggested Investment: ${investment_amt}\n\n"
+    f"Why: {reason}\n\n"
+    f"Note: Drawdown is context only and not used in signal logic."
 )
+
+# -----------------------
+# SEND ALERT
+# -----------------------
 
 send_telegram(message)
 
