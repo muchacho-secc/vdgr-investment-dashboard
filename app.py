@@ -31,6 +31,13 @@ TIME_OPTIONS = {
     "36 months": 36,
 }
 
+INVESTMENT_MAP = {
+    "LOW": 0,
+    "MEDIUM": 200,
+    "HIGH": 400,
+    "NONE": 0,
+}
+
 # -----------------------
 # HELPERS
 # -----------------------
@@ -47,17 +54,22 @@ def filter_months(data, months):
     return data[data.index >= start_date].copy()
 
 
+def investment(signal):
+    return INVESTMENT_MAP.get(str(signal).upper(), 0)
+
+
 def signal_summary_text(row):
     signal = row["Signal"]
     rsi = row["RSI"]
     vix = row["VIX"]
+    suggested = investment(signal)
 
     if signal == "HIGH":
-        return f"HIGH signal because RSI is low ({rsi:.1f}) and VIX is elevated ({vix:.1f})."
+        return f"HIGH signal because RSI is low ({rsi:.1f}) and VIX is elevated ({vix:.1f}). Suggested purchase: ${suggested}."
     elif signal == "MEDIUM":
-        return f"MEDIUM signal because RSI is soft ({rsi:.1f}) and VIX shows fear ({vix:.1f})."
+        return f"MEDIUM signal because RSI is soft ({rsi:.1f}) and VIX shows fear ({vix:.1f}). Suggested purchase: ${suggested}."
     elif signal == "LOW":
-        return f"LOW signal because RSI is below the low threshold ({rsi:.1f}) and VIX is above calm levels ({vix:.1f})."
+        return f"LOW signal because RSI is below the low threshold ({rsi:.1f}) and VIX is above calm levels ({vix:.1f}). Suggested purchase: ${suggested}."
     else:
         return f"No signal today because RSI ({rsi:.1f}) and VIX ({vix:.1f}) did not meet the alert thresholds together."
 
@@ -72,6 +84,11 @@ def detailed_explanation(row):
 - LOW: RSI < 50 and VIX > 18  
 - MEDIUM: RSI < 45 and VIX > 20  
 - HIGH: RSI < 35 and VIX > 25  
+
+**Suggested purchases**
+- LOW: ${INVESTMENT_MAP['LOW']}
+- MEDIUM: ${INVESTMENT_MAP['MEDIUM']}
+- HIGH: ${INVESTMENT_MAP['HIGH']}
 
 **Today's values**
 - RSI: {rsi:.2f}
@@ -108,14 +125,14 @@ def load_data():
     if isinstance(vix.columns, pd.MultiIndex):
         vix.columns = vix.columns.get_level_values(0)
 
-    vdgr = vdgr[['Close']].copy()
-    vix = vix[['Close']].copy()
+    vdgr = vdgr[["Close"]].copy()
+    vix = vix[["Close"]].copy()
     vix.columns = ["VIX"]
 
     data = vdgr.join(vix, how="inner")
 
     # RSI
-    delta = data['Close'].diff()
+    delta = data["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
@@ -123,22 +140,19 @@ def load_data():
     avg_loss = loss.rolling(14).mean()
 
     rs = avg_gain / avg_loss
-    data['RSI'] = 100 - (100 / (1 + rs))
+    data["RSI"] = 100 - (100 / (1 + rs))
 
     # Drawdown (context only)
-    data['6M_High'] = data['Close'].rolling(126).max()
-    data['DrawdownPct'] = ((data['Close'] - data['6M_High']) / data['6M_High']) * 100
+    data["6M_High"] = data["Close"].rolling(126).max()
+    data["DrawdownPct"] = ((data["Close"] - data["6M_High"]) / data["6M_High"]) * 100
 
     # SIGNAL LOGIC: RSI + VIX ONLY
-    data['Signal'] = "NONE"
-    data.loc[(data['RSI'] < 50) & (data['VIX'] > 18), 'Signal'] = "LOW"
-    data.loc[(data['RSI'] < 45) & (data['VIX'] > 20), 'Signal'] = "MEDIUM"
-    data.loc[(data['RSI'] < 35) & (data['VIX'] > 25), 'Signal'] = "HIGH"
+    data["Signal"] = "NONE"
+    data.loc[(data["RSI"] < 50) & (data["VIX"] > 18), "Signal"] = "LOW"
+    data.loc[(data["RSI"] < 45) & (data["VIX"] > 20), "Signal"] = "MEDIUM"
+    data.loc[(data["RSI"] < 35) & (data["VIX"] > 25), "Signal"] = "HIGH"
 
-    def investment(signal):
-        return {"LOW": 400, "MEDIUM": 800, "HIGH": 1600}.get(signal, 0)
-
-    data['Investment'] = data['Signal'].apply(investment)
+    data["Investment"] = data["Signal"].apply(investment)
 
     data = data.dropna().copy()
     data.index = pd.to_datetime(data.index)
@@ -149,73 +163,88 @@ def load_data():
 def build_recent_signal_timeline(data, days=30):
     recent = data.tail(days).copy()
 
-    signal_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
-    recent["SignalNum"] = recent["Signal"].map(signal_map)
+    if recent.empty:
+        return go.Figure()
 
-    colorscale = [
-        [0.00, COLORS["NONE"]],
-        [0.24, COLORS["NONE"]],
-        [0.25, COLORS["LOW"]],
-        [0.49, COLORS["LOW"]],
-        [0.50, COLORS["MEDIUM"]],
-        [0.74, COLORS["MEDIUM"]],
-        [0.75, COLORS["HIGH"]],
-        [1.00, COLORS["HIGH"]],
-    ]
+    recent["PlotX"] = list(range(len(recent)))
+    recent["Color"] = recent["Signal"].map(COLORS).fillna(COLORS["NONE"])
+    recent["BuyAmount"] = recent["Signal"].apply(investment)
 
-    x_dates = recent.index
-    hover_text = [
-        f"Date: {d.strftime('%d-%m-%Y')}<br>Signal: {s}"
-        for d, s in zip(recent.index, recent["Signal"])
-    ]
-
-    # bottom labels: show every 2nd day to reduce clutter
-    bottom_labels = [d.strftime("%d") if i % 2 == 0 else "" for i, d in enumerate(x_dates)]
-
-    # top labels: show month when it changes
-    top_tickvals = []
-    top_ticktext = []
-    prev_month = None
-
-    for d in x_dates:
-        month_label = d.strftime("%b %Y")
-        if month_label != prev_month:
-            top_tickvals.append(d)
-            top_ticktext.append(month_label)
-            prev_month = month_label
+    hover_data = list(
+        zip(
+            recent.index.strftime("%d-%m-%Y"),
+            recent["Signal"],
+            recent["BuyAmount"],
+            recent["RSI"].round(2),
+            recent["VIX"].round(2),
+        )
+    )
 
     fig = go.Figure()
 
     fig.add_trace(
-        go.Heatmap(
-            z=[recent["SignalNum"].tolist()],
-            x=x_dates,
-            y=[""],
-            colorscale=colorscale,
-            zmin=0,
-            zmax=3,
-            showscale=False,
-            hoverongaps=False,
-            text=[hover_text],
-            hovertemplate="%{text}<extra></extra>",
+        go.Bar(
+            x=recent["PlotX"],
+            y=[1] * len(recent),
+            marker=dict(
+                color=recent["Color"],
+                line=dict(color="rgba(255,255,255,0.95)", width=1),
+            ),
+            width=1.0,
+            customdata=hover_data,
+            hovertemplate=(
+                "Date: %{customdata[0]}<br>"
+                "Signal: %{customdata[1]}<br>"
+                "Suggested Investment: $%{customdata[2]}<br>"
+                "RSI: %{customdata[3]}<br>"
+                "VIX: %{customdata[4]}<extra></extra>"
+            ),
+            showlegend=False,
         )
     )
 
+    top_tickvals = []
+    top_ticktext = []
+    prev_month_label = None
+
+    for plot_x, dt in zip(recent["PlotX"], recent.index):
+        month_label = dt.strftime("%b %Y")
+        if month_label != prev_month_label:
+            top_tickvals.append(plot_x)
+            top_ticktext.append(month_label)
+            prev_month_label = month_label
+
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=recent["PlotX"].tolist(),
+        ticktext=recent.index.strftime("%d").tolist(),
+        tickfont=dict(size=10),
+        tickangle=0,
+        showgrid=False,
+        zeroline=False,
+        showline=False,
+        range=[-0.5, len(recent) - 0.5],
+        fixedrange=True,
+    )
+
     fig.update_layout(
-        height=120,
-        margin=dict(l=10, r=10, t=25, b=30),
+        height=170,
+        margin=dict(l=10, r=10, t=35, b=45),
         plot_bgcolor="white",
         paper_bgcolor="white",
+        bargap=0,
         xaxis=dict(
             title="",
             side="bottom",
             tickmode="array",
-            tickvals=x_dates,
-            ticktext=bottom_labels,
+            tickvals=recent["PlotX"].tolist(),
+            ticktext=recent.index.strftime("%d").tolist(),
+            tickfont=dict(size=10),
             tickangle=0,
             showgrid=False,
             zeroline=False,
             showline=False,
+            fixedrange=True,
         ),
         xaxis2=dict(
             title="",
@@ -224,15 +253,16 @@ def build_recent_signal_timeline(data, days=30):
             tickmode="array",
             tickvals=top_tickvals,
             ticktext=top_ticktext,
+            tickfont=dict(size=11),
             showgrid=False,
             zeroline=False,
             showline=False,
+            fixedrange=True,
         ),
         yaxis=dict(
-            showticklabels=False,
-            showgrid=False,
-            zeroline=False,
-            showline=False,
+            visible=False,
+            range=[0, 1],
+            fixedrange=True,
         ),
     )
 
@@ -502,7 +532,7 @@ st.plotly_chart(build_recent_signal_timeline(data, 30), use_container_width=True
 # -----------------------
 
 st.subheader("Signal Summary")
-signal_counts_12m = filter_months(data, 12)['Signal'].value_counts()
+signal_counts_12m = filter_months(data, 12)["Signal"].value_counts()
 
 c1, c2, c3 = st.columns(3)
 c1.metric("LOW Signals (12m)", int(signal_counts_12m.get("LOW", 0)))
@@ -591,12 +621,12 @@ with history_tab1:
     signal_table = table_base[table_base["Signal"] != "NONE"].copy()
     signal_table["Date"] = pd.to_datetime(signal_table["Date"]).dt.strftime("%d-%m-%Y")
     signal_table = signal_table.rename(columns={"Close": "Price", "Investment": "Suggested Investment"})
-    signal_table = signal_table[['Date', 'Price', 'RSI', 'VIX', 'DrawdownPct', 'Signal', 'Suggested Investment']]
+    signal_table = signal_table[["Date", "Price", "RSI", "VIX", "DrawdownPct", "Signal", "Suggested Investment"]]
     st.dataframe(signal_table, use_container_width=True)
 
 with history_tab2:
     full_table = table_base.copy()
     full_table["Date"] = pd.to_datetime(full_table["Date"]).dt.strftime("%d-%m-%Y")
     full_table = full_table.rename(columns={"Close": "Price", "Investment": "Suggested Investment"})
-    full_table = full_table[['Date', 'Price', 'RSI', 'VIX', 'DrawdownPct', 'Signal', 'Suggested Investment']]
+    full_table = full_table[["Date", "Price", "RSI", "VIX", "DrawdownPct", "Signal", "Suggested Investment"]]
     st.dataframe(full_table, use_container_width=True)
