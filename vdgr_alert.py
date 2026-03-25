@@ -62,14 +62,36 @@ def build_reason(signal, rsi, vix):
     else:
         return f"No thresholds met (RSI {rsi:.1f}, VIX {vix:.1f})"
 
+
+def count_extreme_signals(data, years):
+    df = data.copy()
+
+    end_date = df.index.max()
+    start_date = end_date - pd.DateOffset(years=years)
+    df = df[df.index >= start_date].copy()
+
+    df["EXTREME"] = (
+        (df["RSI"] < 30) &
+        (df["VIX"] > 30) &
+        (df["DrawdownPct"] < -10)
+    )
+
+    return int(df["EXTREME"].sum())
+
 # -----------------------
 # LOAD DATA
 # -----------------------
 
 print("Downloading market data...")
 
-vdgr = yf.download(VDGR_TICKER, period="12mo", auto_adjust=False)
-vix = yf.download(VIX_TICKER, period="12mo", auto_adjust=False)
+# Need at least 3 years if you want 1y, 2y and 3y counts
+vdgr = yf.download(VDGR_TICKER, period="3y", auto_adjust=False, progress=False)
+vix = yf.download(VIX_TICKER, period="3y", auto_adjust=False, progress=False)
+
+if vdgr.empty:
+    raise ValueError("No VDGR data downloaded.")
+if vix.empty:
+    raise ValueError("No VIX data downloaded.")
 
 if isinstance(vdgr.columns, pd.MultiIndex):
     vdgr.columns = vdgr.columns.get_level_values(0)
@@ -82,6 +104,9 @@ vix = vix[["Close"]].copy()
 vix.rename(columns={"Close": "VIX"}, inplace=True)
 
 data = vdgr.join(vix, how="inner")
+
+if data.empty:
+    raise ValueError("Joined VDGR/VIX dataset is empty.")
 
 # -----------------------
 # RSI
@@ -114,7 +139,18 @@ data.loc[(data["RSI"] < 45) & (data["VIX"] > 20), "Signal"] = "MEDIUM"
 data.loc[(data["RSI"] < 35) & (data["VIX"] > 25), "Signal"] = "HIGH"
 
 data["Investment"] = data["Signal"].apply(investment)
-data = data.dropna(subset=["Close", "RSI", "VIX"]).copy()
+data = data.dropna(subset=["Close", "RSI", "VIX", "DrawdownPct"]).copy()
+
+if data.empty:
+    raise ValueError("No usable rows after indicator calculations.")
+
+# -----------------------
+# EXTREME COUNTS
+# -----------------------
+
+print("\n--- EXTREME SIGNAL COUNTS ---")
+for y in [1, 2, 3]:
+    print(f"{y} year EXTREME signals: {count_extreme_signals(data, y)}")
 
 # -----------------------
 # LATEST VALUES
@@ -125,7 +161,7 @@ latest = data.iloc[-1]
 price = float(latest["Close"])
 rsi = float(latest["RSI"])
 vix_val = float(latest["VIX"])
-drawdown = float(latest["DrawdownPct"]) if pd.notna(latest["DrawdownPct"]) else 0.0
+drawdown = float(latest["DrawdownPct"])
 signal = latest["Signal"]
 investment_amt = investment(signal)
 date_str = data.index[-1].strftime("%d-%m-%Y")
@@ -157,26 +193,7 @@ message = (
 # SEND ALERT
 # -----------------------
 
-send_telegram(message)
+# Uncomment this only when you want Telegram enabled
+# send_telegram(message)
 
 print("Done.")
-
-def count_extreme_signals(data, years):
-    df = data.copy()
-
-    end_date = df.index.max()
-    start_date = end_date - pd.DateOffset(years=years)
-    df = df[df.index >= start_date]
-
-    df["EXTREME"] = (
-        (df["RSI"] < 30) &
-        (df["VIX"] > 30) &
-        (df["DrawdownPct"] < -10)
-    )
-
-    return int(df["EXTREME"].sum())
-
-
-print("\n--- EXTREME SIGNAL COUNTS ---")
-for y in [1, 2, 3]:
-    print(f"{y} year EXTREME signals:", count_extreme_signals(data, y))
