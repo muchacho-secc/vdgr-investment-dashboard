@@ -160,3 +160,23 @@ message = (
 send_telegram(message)
 
 print("Done.")
+
+def count_extreme_signals(data, years):
+    df = data.copy()
+
+    end_date = df.index.max()
+    start_date = end_date - pd.DateOffset(years=years)
+    df = df[df.index >= start_date]
+
+    df["EXTREME"] = (
+        (df["RSI"] < 30) &
+        (df["VIX"] > 30) &
+        (df["DrawdownPct"] < -10)
+    )
+
+    return int(df["EXTREME"].sum())
+
+
+print("\n--- EXTREME SIGNAL COUNTS ---")
+for y in [1, 2, 3]:
+    print(f"{y} year EXTREME signals:", count_extreme_signals(data, y))
