@@ -13,14 +13,15 @@ st.title("VDGR Investment Dashboard")
 # -----------------------
 
 COLORS = {
-    "LOW": "#ffd43b",       # yellow
-    "MEDIUM": "#f59f00",    # orange
-    "HIGH": "#e03131",      # red
-    "NONE": "#f1f3f5",      # very light grey
-    "price": "#1f77b4",     # blue
-    "rsi": "#2b8a3e",       # green
-    "vix": "#6f42c1",       # purple
-    "drawdown": "#495057",  # dark grey
+    "NONE": "#f1f3f5",
+    "LOW": "#ffd43b",
+    "MEDIUM": "#f59f00",
+    "HIGH": "#e03131",
+    "EXTREME": "#7b2cbf",
+    "price": "#1f77b4",
+    "rsi": "#2b8a3e",
+    "vix": "#6f42c1",
+    "drawdown": "#495057",
 }
 
 TIME_OPTIONS = {
@@ -31,11 +32,20 @@ TIME_OPTIONS = {
     "36 months": 36,
 }
 
+SIGNAL_COUNT_OPTIONS = {
+    "3 months": 3,
+    "6 months": 6,
+    "1 year": 12,
+    "2 years": 24,
+    "3 years": 36,
+}
+
 INVESTMENT_MAP = {
+    "NONE": 0,
     "LOW": 0,
     "MEDIUM": 200,
     "HIGH": 400,
-    "NONE": 0,
+    "EXTREME": 600,
 }
 
 # -----------------------
@@ -48,7 +58,7 @@ def format_full_date(dt_value):
 
 def filter_months(data, months):
     if data.empty:
-        return data
+        return data.copy()
     end_date = data.index.max()
     start_date = end_date - pd.DateOffset(months=months)
     return data[data.index >= start_date].copy()
@@ -58,20 +68,37 @@ def investment(signal):
     return INVESTMENT_MAP.get(str(signal).upper(), 0)
 
 
+def build_reason(signal, rsi, vix, drawdown):
+    if signal == "EXTREME":
+        return f"RSI ({rsi:.1f}) < 30, VIX ({vix:.1f}) > 30, and drawdown ({drawdown:.1f}%) < -10%"
+    if signal == "HIGH":
+        return f"RSI ({rsi:.1f}) < 35 and VIX ({vix:.1f}) > 25"
+    if signal == "MEDIUM":
+        return f"RSI ({rsi:.1f}) < 45 and VIX ({vix:.1f}) > 20"
+    if signal == "LOW":
+        return f"RSI ({rsi:.1f}) < 50 and VIX ({vix:.1f}) > 18"
+    return f"No thresholds met (RSI {rsi:.1f}, VIX {vix:.1f})"
+
+
 def signal_summary_text(row):
     signal = row["Signal"]
     rsi = row["RSI"]
     vix = row["VIX"]
+    drawdown = row["DrawdownPct"]
     suggested = investment(signal)
 
+    if signal == "EXTREME":
+        return (
+            f"EXTREME signal because RSI is very weak ({rsi:.1f}), VIX is elevated ({vix:.1f}), "
+            f"and drawdown is deep ({drawdown:.1f}%). Suggested purchase: ${suggested}."
+        )
     if signal == "HIGH":
         return f"HIGH signal because RSI is low ({rsi:.1f}) and VIX is elevated ({vix:.1f}). Suggested purchase: ${suggested}."
-    elif signal == "MEDIUM":
+    if signal == "MEDIUM":
         return f"MEDIUM signal because RSI is soft ({rsi:.1f}) and VIX shows fear ({vix:.1f}). Suggested purchase: ${suggested}."
-    elif signal == "LOW":
+    if signal == "LOW":
         return f"LOW signal because RSI is below the low threshold ({rsi:.1f}) and VIX is above calm levels ({vix:.1f}). Suggested purchase: ${suggested}."
-    else:
-        return f"No signal today because RSI ({rsi:.1f}) and VIX ({vix:.1f}) did not meet the alert thresholds together."
+    return f"No signal today because RSI ({rsi:.1f}) and VIX ({vix:.1f}) did not meet the alert thresholds together."
 
 
 def detailed_explanation(row):
@@ -81,14 +108,16 @@ def detailed_explanation(row):
 
     return f"""
 **Signal logic used**
-- LOW: RSI < 50 and VIX > 18  
-- MEDIUM: RSI < 45 and VIX > 20  
-- HIGH: RSI < 35 and VIX > 25  
+- LOW: RSI < 50 and VIX > 18
+- MEDIUM: RSI < 45 and VIX > 20
+- HIGH: RSI < 35 and VIX > 25
+- EXTREME: RSI < 30 and VIX > 30 and Drawdown < -10%
 
 **Suggested purchases**
 - LOW: ${INVESTMENT_MAP['LOW']}
 - MEDIUM: ${INVESTMENT_MAP['MEDIUM']}
 - HIGH: ${INVESTMENT_MAP['HIGH']}
+- EXTREME: ${INVESTMENT_MAP['EXTREME']}
 
 **Today's values**
 - RSI: {rsi:.2f}
@@ -96,28 +125,34 @@ def detailed_explanation(row):
 - Drawdown: {dd:.2f}%
 
 **Important**
-- Drawdown is shown as **additional context only**
-- Drawdown is **not included** in the signal logic
-- A buy signal is triggered only by the RSI + VIX rules above
+- Drawdown is **not used** for LOW, MEDIUM, or HIGH
+- Drawdown is only used to confirm **EXTREME**
+- EXTREME overrides HIGH when its stricter rule is met
 
 **How to read the indicators**
 - **RSI** measures momentum:
-  - Above 70 = often overbought / stretched high
+  - Above 70 = often overbought
   - 50 to 70 = stronger momentum
-  - 30 to 50 = softer / weaker momentum
+  - 30 to 50 = softer momentum
   - Below 30 = often oversold
-- **VIX** measures market fear / volatility:
+- **VIX** measures market fear:
   - Below 20 = calm market
   - 20 to 25 = mild fear
   - 25 to 30 = elevated fear
-  - Above 30 = strong stress / panic
+  - Above 30 = strong stress
+- **Drawdown** measures how far VDGR is below its 6-month high
 """
 
 
 @st.cache_data(ttl=3600)
 def load_data():
-    vdgr = yf.download("VDGR.AX", period="36mo", auto_adjust=False)
-    vix = yf.download("^VIX", period="36mo", auto_adjust=False)
+    vdgr = yf.download("VDGR.AX", period="3y", auto_adjust=False, progress=False)
+    vix = yf.download("^VIX", period="3y", auto_adjust=False, progress=False)
+
+    if vdgr.empty:
+        raise ValueError("No VDGR data downloaded.")
+    if vix.empty:
+        raise ValueError("No VIX data downloaded.")
 
     if isinstance(vdgr.columns, pd.MultiIndex):
         vdgr.columns = vdgr.columns.get_level_values(0)
@@ -131,6 +166,9 @@ def load_data():
 
     data = vdgr.join(vix, how="inner")
 
+    if data.empty:
+        raise ValueError("Joined VDGR/VIX dataset is empty.")
+
     # RSI
     delta = data["Close"].diff()
     gain = delta.clip(lower=0)
@@ -142,19 +180,22 @@ def load_data():
     rs = avg_gain / avg_loss
     data["RSI"] = 100 - (100 / (1 + rs))
 
-    # Drawdown (context only)
+    # Drawdown from rolling 6-month high
     data["6M_High"] = data["Close"].rolling(126).max()
     data["DrawdownPct"] = ((data["Close"] - data["6M_High"]) / data["6M_High"]) * 100
 
-    # SIGNAL LOGIC: RSI + VIX ONLY
+    # Signal logic
     data["Signal"] = "NONE"
     data.loc[(data["RSI"] < 50) & (data["VIX"] > 18), "Signal"] = "LOW"
     data.loc[(data["RSI"] < 45) & (data["VIX"] > 20), "Signal"] = "MEDIUM"
     data.loc[(data["RSI"] < 35) & (data["VIX"] > 25), "Signal"] = "HIGH"
+    data.loc[
+        (data["RSI"] < 30) & (data["VIX"] > 30) & (data["DrawdownPct"] < -10),
+        "Signal"
+    ] = "EXTREME"
 
     data["Investment"] = data["Signal"].apply(investment)
-
-    data = data.dropna().copy()
+    data = data.dropna(subset=["Close", "RSI", "VIX", "DrawdownPct"]).copy()
     data.index = pd.to_datetime(data.index)
 
     return data
@@ -177,6 +218,7 @@ def build_recent_signal_timeline(data, days=30):
             recent["BuyAmount"],
             recent["RSI"].round(2),
             recent["VIX"].round(2),
+            recent["DrawdownPct"].round(2),
         )
     )
 
@@ -197,7 +239,8 @@ def build_recent_signal_timeline(data, days=30):
                 "Signal: %{customdata[1]}<br>"
                 "Suggested Investment: $%{customdata[2]}<br>"
                 "RSI: %{customdata[3]}<br>"
-                "VIX: %{customdata[4]}<extra></extra>"
+                "VIX: %{customdata[4]}<br>"
+                "Drawdown: %{customdata[5]}%<extra></extra>"
             ),
             showlegend=False,
         )
@@ -283,7 +326,7 @@ def build_price_chart(data):
         )
     )
 
-    for signal in ["LOW", "MEDIUM", "HIGH"]:
+    for signal in ["LOW", "MEDIUM", "HIGH", "EXTREME"]:
         subset = data[data["Signal"] == signal]
         fig.add_trace(
             go.Scatter(
@@ -324,8 +367,8 @@ def build_rsi_chart(data):
         (50, "LOW threshold (50)", COLORS["LOW"], "dash"),
         (45, "MEDIUM threshold (45)", COLORS["MEDIUM"], "dash"),
         (35, "HIGH threshold (35)", COLORS["HIGH"], "dash"),
+        (30, "EXTREME threshold (30)", COLORS["EXTREME"], "dash"),
         (70, "Overbought reference (70)", "#868e96", "dot"),
-        (30, "Oversold reference (30)", "#868e96", "dot"),
     ]:
         fig.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="top left")
 
@@ -357,7 +400,7 @@ def build_vix_chart(data):
         (18, "LOW threshold (18)", COLORS["LOW"], "dash"),
         (20, "MEDIUM threshold (20)", COLORS["MEDIUM"], "dash"),
         (25, "HIGH threshold (25)", COLORS["HIGH"], "dash"),
-        (30, "Stress reference (30)", "#495057", "dot"),
+        (30, "EXTREME threshold (30)", COLORS["EXTREME"], "dash"),
     ]:
         fig.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="top left")
 
@@ -387,8 +430,8 @@ def build_drawdown_chart(data):
 
     for y_val, name, color, dash in [
         (-5, "-5% reference", COLORS["LOW"], "dash"),
-        (-10, "-10% reference", COLORS["MEDIUM"], "dash"),
-        (-15, "-15% reference", COLORS["HIGH"], "dash"),
+        (-10, "EXTREME drawdown threshold (-10%)", COLORS["EXTREME"], "dash"),
+        (-15, "-15% reference", COLORS["HIGH"], "dot"),
     ]:
         fig.add_hline(y=y_val, line_color=color, line_dash=dash, annotation_text=name, annotation_position="bottom left")
 
@@ -409,16 +452,18 @@ def build_month_calendar_plot(month_df, year, month):
     z = []
     text = []
 
-    signal_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
+    signal_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "EXTREME": 4}
     color_scale = [
         [0.00, COLORS["NONE"]],
-        [0.24, COLORS["NONE"]],
-        [0.25, COLORS["LOW"]],
-        [0.49, COLORS["LOW"]],
-        [0.50, COLORS["MEDIUM"]],
-        [0.74, COLORS["MEDIUM"]],
-        [0.75, COLORS["HIGH"]],
-        [1.00, COLORS["HIGH"]],
+        [0.19, COLORS["NONE"]],
+        [0.20, COLORS["LOW"]],
+        [0.39, COLORS["LOW"]],
+        [0.40, COLORS["MEDIUM"]],
+        [0.59, COLORS["MEDIUM"]],
+        [0.60, COLORS["HIGH"]],
+        [0.79, COLORS["HIGH"]],
+        [0.80, COLORS["EXTREME"]],
+        [1.00, COLORS["EXTREME"]],
     ]
 
     for week in month_days:
@@ -452,7 +497,7 @@ def build_month_calendar_plot(month_df, year, month):
             textfont={"size": 14, "color": "black"},
             colorscale=color_scale,
             zmin=0,
-            zmax=3,
+            zmax=4,
             showscale=False,
             hoverongaps=False,
             hovertemplate="Day: %{text}<extra></extra>",
@@ -473,7 +518,11 @@ def build_month_calendar_plot(month_df, year, month):
 # LOAD DATA
 # -----------------------
 
-data = load_data()
+try:
+    data = load_data()
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    st.stop()
 
 if data.empty:
     st.error("No data available.")
@@ -495,7 +544,7 @@ col4.metric("VIX", f"{latest['VIX']:.2f}")
 col5.metric("Date", format_full_date(data.index[-1]))
 
 st.success(signal_summary_text(latest))
-st.caption(f"Drawdown context: {latest['DrawdownPct']:.2f}% (shown for context only, not used in signal logic)")
+st.caption(f"Drawdown context: {latest['DrawdownPct']:.2f}%")
 
 with st.expander("Detailed explanation of today's signal and indicators"):
     st.markdown(detailed_explanation(latest))
@@ -507,7 +556,7 @@ with st.expander("Detailed explanation of today's signal and indicators"):
 st.subheader("Recent Signal Timeline")
 st.caption("Daily signal ribbon for the most recent 30 trading days.")
 
-legend_cols = st.columns(4)
+legend_cols = st.columns(5)
 legend_cols[0].markdown(
     f"<div style='background:{COLORS['NONE']};padding:6px;border-radius:6px;text-align:center;'>NONE</div>",
     unsafe_allow_html=True
@@ -524,6 +573,10 @@ legend_cols[3].markdown(
     f"<div style='background:{COLORS['HIGH']};padding:6px;border-radius:6px;text-align:center;color:white;'>HIGH</div>",
     unsafe_allow_html=True
 )
+legend_cols[4].markdown(
+    f"<div style='background:{COLORS['EXTREME']};padding:6px;border-radius:6px;text-align:center;color:white;'>EXTREME</div>",
+    unsafe_allow_html=True
+)
 
 st.plotly_chart(build_recent_signal_timeline(data, 30), use_container_width=True)
 
@@ -532,12 +585,23 @@ st.plotly_chart(build_recent_signal_timeline(data, 30), use_container_width=True
 # -----------------------
 
 st.subheader("Signal Summary")
-signal_counts_12m = filter_months(data, 12)["Signal"].value_counts()
 
-c1, c2, c3 = st.columns(3)
-c1.metric("LOW Signals (12m)", int(signal_counts_12m.get("LOW", 0)))
-c2.metric("MEDIUM Signals (12m)", int(signal_counts_12m.get("MEDIUM", 0)))
-c3.metric("HIGH Signals (12m)", int(signal_counts_12m.get("HIGH", 0)))
+signal_count_range = st.radio(
+    "Signal count range",
+    list(SIGNAL_COUNT_OPTIONS.keys()),
+    index=2,
+    horizontal=True,
+    key="signal_count_range",
+)
+
+count_data = filter_months(data, SIGNAL_COUNT_OPTIONS[signal_count_range])
+signal_counts = count_data["Signal"].value_counts()
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("LOW Signals", int(signal_counts.get("LOW", 0)))
+c2.metric("MEDIUM Signals", int(signal_counts.get("MEDIUM", 0)))
+c3.metric("HIGH Signals", int(signal_counts.get("HIGH", 0)))
+c4.metric("EXTREME Signals", int(signal_counts.get("EXTREME", 0)))
 
 # -----------------------
 # PRICE CHART
@@ -570,7 +634,6 @@ with tab_dd:
     dd_range = st.radio("Drawdown range", ["6 months", "12 months", "24 months", "36 months"], index=1, horizontal=True, key="dd_range")
     dd_data = filter_months(data, TIME_OPTIONS[dd_range])
     st.plotly_chart(build_drawdown_chart(dd_data), use_container_width=True)
-    st.caption("Drawdown is displayed as extra context. It is not part of the alert rules for LOW / MEDIUM / HIGH signals.")
 
 # -----------------------
 # CALENDAR
@@ -582,11 +645,12 @@ with st.expander("Signal Calendar", expanded=False):
     calendar_range = st.radio("Calendar range", ["3 months", "6 months", "12 months"], index=0, horizontal=True, key="calendar_range")
     cal_data = filter_months(data, TIME_OPTIONS[calendar_range]).copy()
 
-    legend_cols = st.columns(4)
+    legend_cols = st.columns(5)
     legend_cols[0].markdown(f"<div style='background:{COLORS['NONE']};padding:8px;border-radius:6px;text-align:center;'>NONE</div>", unsafe_allow_html=True)
     legend_cols[1].markdown(f"<div style='background:{COLORS['LOW']};padding:8px;border-radius:6px;text-align:center;'>LOW</div>", unsafe_allow_html=True)
     legend_cols[2].markdown(f"<div style='background:{COLORS['MEDIUM']};padding:8px;border-radius:6px;text-align:center;'>MEDIUM</div>", unsafe_allow_html=True)
     legend_cols[3].markdown(f"<div style='background:{COLORS['HIGH']};padding:8px;border-radius:6px;text-align:center;color:white;'>HIGH</div>", unsafe_allow_html=True)
+    legend_cols[4].markdown(f"<div style='background:{COLORS['EXTREME']};padding:8px;border-radius:6px;text-align:center;color:white;'>EXTREME</div>", unsafe_allow_html=True)
 
     calendar_df = cal_data.reset_index().rename(columns={"index": "Date"})
     calendar_df["Date"] = pd.to_datetime(calendar_df["Date"])
