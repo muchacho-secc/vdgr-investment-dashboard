@@ -187,9 +187,7 @@ def _next_tier_comment(signal: str, rsi: float, vix: float, drawdown: float) -> 
             blockers.append(f"RSI is still {rsi - THRESHOLDS['HIGH']['rsi']:.1f} points above 35")
         if vix <= THRESHOLDS["HIGH"]["vix"]:
             blockers.append(f"VIX is still {THRESHOLDS['HIGH']['vix'] - vix:.1f} points below 25")
-        if blockers:
-            return "HIGH has not triggered yet because " + " and ".join(blockers) + "."
-        return ""
+        return "HIGH has not triggered yet because " + " and ".join(blockers) + "." if blockers else ""
 
     if signal == "HIGH":
         if rsi > THRESHOLDS["EXTREME"]["rsi"]:
@@ -198,9 +196,7 @@ def _next_tier_comment(signal: str, rsi: float, vix: float, drawdown: float) -> 
             blockers.append(f"VIX is still {THRESHOLDS['EXTREME']['vix'] - vix:.1f} points below 30")
         if drawdown >= THRESHOLDS["EXTREME"]["drawdown"]:
             blockers.append(f"drawdown is still {drawdown - THRESHOLDS['EXTREME']['drawdown']:.1f}% above -10%")
-        if blockers:
-            return "EXTREME has not triggered because " + " and ".join(blockers) + "."
-        return ""
+        return "EXTREME has not triggered because " + " and ".join(blockers) + "." if blockers else ""
 
     return ""
 
@@ -216,6 +212,7 @@ def detailed_reason(row: pd.Series) -> str:
             f"VDGR is showing early weakness rather than a buy signal. RSI is {rsi:.1f}, "
             f"which is below 50, and VIX is {vix:.1f}, which is above 18."
         )
+
     if signal == "MEDIUM":
         extra = _next_tier_comment(signal, rsi, vix, drawdown)
         return (
@@ -223,6 +220,7 @@ def detailed_reason(row: pd.Series) -> str:
             f"so this qualifies as a moderate opportunity."
             + (f" {extra}" if extra else "")
         )
+
     if signal == "HIGH":
         extra = _next_tier_comment(signal, rsi, vix, drawdown)
         return (
@@ -230,11 +228,13 @@ def detailed_reason(row: pd.Series) -> str:
             f"so this qualifies as a strong opportunity."
             + (f" {extra}" if extra else "")
         )
+
     if signal == "EXTREME":
         return (
             f"This is a rare opportunity. RSI is {rsi:.1f}, VIX is {vix:.1f}, and drawdown is {drawdown:.1f}%, "
             f"which means both fear and asset-level weakness are severe enough to trigger the top tier."
         )
+
     return f"No buy signal today. RSI is {rsi:.1f} and VIX is {vix:.1f}."
 
 
@@ -256,7 +256,7 @@ def build_alert_message(row: pd.Series, market_date: pd.Timestamp) -> str | None
     )
 
 
-def live_performance_ledger(data: pd.DataFrame) -> pd.DataFrame:
+def load_live_ledger() -> pd.DataFrame:
     sheet = get_sheet()
     records = sheet.get_all_records()
 
