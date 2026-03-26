@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
-from signals_generated import (
+from signals import (
     LAUNCH_DATE,
     LEDGER_FILE,
     add_forward_returns,

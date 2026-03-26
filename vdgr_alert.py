@@ -5,7 +5,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-from signals_generated import (
+from signals import (
     LEDGER_FILE,
     append_live_trade_if_needed,
     build_alert_message,
