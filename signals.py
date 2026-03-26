@@ -197,9 +197,7 @@ def _next_tier_comment(signal: str, rsi: float, vix: float, drawdown: float) -> 
         if vix <= THRESHOLDS["EXTREME"]["vix"]:
             blockers.append(f"VIX is still {THRESHOLDS['EXTREME']['vix'] - vix:.1f} points below 30")
         if drawdown >= THRESHOLDS["EXTREME"]["drawdown"]:
-            blockers.append(
-                f"drawdown is still {drawdown - THRESHOLDS['EXTREME']['drawdown']:.1f}% above -10%"
-            )
+            blockers.append(f"drawdown is still {drawdown - THRESHOLDS['EXTREME']['drawdown']:.1f}% above -10%")
         if blockers:
             return "EXTREME has not triggered because " + " and ".join(blockers) + "."
         return ""
