@@ -1,0 +1,4 @@
+live_signal_ledger.csv
+.env
+__pycache__/
+*.pyc
