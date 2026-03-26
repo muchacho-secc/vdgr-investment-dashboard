@@ -1,9 +1,9 @@
-name: Run VDGR Alert Daily
+name: VDGR Alert
 
 on:
-  schedule:
-    - cron: '0 22 * * *'   # 8:00 AM AEST year-round
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1-5'
 
 jobs:
   run-alert:
@@ -16,12 +16,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install packages
+        run: pip install gspread oauth2client streamlit yfinance requests pandas plotly
 
-      - name: Run alert script
+      - name: Create credentials file
+        run: |
+          echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
+
+      - name: Run alert
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
