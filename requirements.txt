@@ -1,5 +1,7 @@
 streamlit
-yfinance
 pandas
+yfinance
 plotly
 requests
+gspread
+oauth2client
