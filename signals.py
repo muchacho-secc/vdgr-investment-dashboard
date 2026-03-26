@@ -256,7 +256,7 @@ def build_alert_message(row: pd.Series, market_date: pd.Timestamp) -> str | None
     )
 
 
-def load_live_ledger() -> pd.DataFrame:
+def live_performance_ledger(data: pd.DataFrame) -> pd.DataFrame:
     sheet = get_sheet()
     records = sheet.get_all_records()
 
