@@ -216,8 +216,7 @@ message = (
 # SEND ALERT
 # -----------------------
 
-# Uncomment once you want Telegram enabled
-# send_telegram(message)
+send_telegram(message)
 
 print("\nLatest message preview:\n")
 print(message)
