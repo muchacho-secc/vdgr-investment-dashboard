@@ -8,6 +8,7 @@ from signals import (
     LAUNCH_DATE,
     add_forward_returns,
     detailed_reason,
+    explain_signal_for_dashboard,
     filter_months,
     format_display_signal,
     investment,
@@ -23,7 +24,7 @@ st.title("VDGR Investment Dashboard")
 
 COLORS = {
     "NONE": "#f1f3f5",
-    "LOW": "#ffd43b",
+    "LOW": "#ffe066",
     "MEDIUM": "#f59f00",
     "HIGH": "#e03131",
     "EXTREME": "#7b2cbf",
@@ -344,9 +345,7 @@ def build_month_calendar_plot(month_df, year, month):
 def calendar_columns_for_range(months_selected: int) -> int:
     if months_selected <= 3:
         return 3
-    if months_selected <= 6:
-        return 2
-    return 1
+    return 2
 
 
 data = load_data()
@@ -364,6 +363,9 @@ col5.metric("Latest Market Date", format_full_date(latest_market_date))
 
 st.success(signal_summary_text(latest))
 st.caption(f"Launch date for live method tracking: {LAUNCH_DATE.strftime('%d-%m-%Y')}")
+
+with st.expander("Why this signal was calculated"):
+    st.markdown(explain_signal_for_dashboard(latest))
 
 st.subheader("Recent Signal Timeline")
 st.caption("Daily signal ribbon for the most recent 30 trading days.")
@@ -482,6 +484,7 @@ for i in range(0, len(month_periods), num_cols):
                     build_month_calendar_plot(month_df, year, month),
                     width="stretch",
                     config=CALENDAR_PLOT_CONFIG,
+                    key=f"calendar_{year}_{month}",
                 )
 
 st.subheader("VDGR Price with Signal Markers")

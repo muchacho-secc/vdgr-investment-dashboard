@@ -1,7 +1,9 @@
-import pandas as pd
+import os
+import json
 from datetime import datetime
 
 import gspread
+import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 
 LAUNCH_DATE = pd.Timestamp("2026-03-27")
@@ -57,10 +59,28 @@ def get_sheet():
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "credentials.json",
-        scope,
-    )
+
+    # 1) Streamlit Cloud secrets
+    try:
+        import streamlit as st
+        if "gcp_service_account" in st.secrets:
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+            client = gspread.authorize(creds)
+            return client.open("VDGR Live Ledger").sheet1
+    except Exception:
+        pass
+
+    # 2) GitHub Actions secret written into env as raw JSON
+    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if raw_json:
+        creds_dict = json.loads(raw_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        return client.open("VDGR Live Ledger").sheet1
+
+    # 3) Local fallback
+    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
     client = gspread.authorize(creds)
     return client.open("VDGR Live Ledger").sheet1
 
@@ -236,6 +256,32 @@ def detailed_reason(row: pd.Series) -> str:
         )
 
     return f"No buy signal today. RSI is {rsi:.1f} and VIX is {vix:.1f}."
+
+
+def explain_signal_for_dashboard(row: pd.Series) -> str:
+    signal = str(row["Signal"]).upper()
+    rsi = float(row["RSI"])
+    vix = float(row["VIX"])
+    drawdown = float(row["DrawdownPct"])
+
+    lines = [
+        f"Today's latest completed market data produced a **{format_display_signal(signal)}** signal.",
+        "",
+        "**Today's values**",
+        f"- RSI: {rsi:.2f}",
+        f"- VIX: {vix:.2f}",
+        f"- Drawdown: {drawdown:.2f}%",
+        "",
+        "**Thresholds**",
+        f"- WATCH: RSI < 50 and VIX > 18",
+        f"- MEDIUM: RSI < 45 and VIX > 20",
+        f"- HIGH: RSI < 35 and VIX > 25",
+        f"- EXTREME: RSI < 30 and VIX > 30 and Drawdown < -10%",
+        "",
+        "**Why this signal was chosen**",
+        f"- {detailed_reason(row)}",
+    ]
+    return "\n".join(lines)
 
 
 def build_alert_message(row: pd.Series, market_date: pd.Timestamp) -> str | None:
