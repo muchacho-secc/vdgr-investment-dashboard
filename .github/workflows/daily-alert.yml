@@ -3,7 +3,7 @@ name: VDGR Alert
 on:
   workflow_dispatch:
   schedule:
-    - cron: '7 0 * * 1-5'
+    - cron: '30 20 * * 0-4'
 
 jobs:
   run-alert:
