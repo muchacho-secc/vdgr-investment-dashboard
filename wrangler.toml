@@ -1,0 +1,6 @@
+name = "vdgr-signal-worker"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["0 22 * * 1-5"]  # 8am AEDT (UTC+10) Monday–Friday
