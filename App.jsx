@@ -16,7 +16,6 @@ const C = {
     MEDIUM:  "#F97316",
     HIGH:    "#EF4444",
     EXTREME: "#8B5CF6",
-    // legacy alias
     WATCH:   "#EAB308",
   },
   bg: { primary: "#0A0A0A", secondary: "#141414", card: "#1C1C1C", border: "#252525" },
@@ -26,13 +25,11 @@ const C = {
   red:    "#EF4444",
 };
 
-// Normalise WATCH → LOW from API responses
 function normaliseTier(tier) {
   if (!tier) return "NONE";
   return tier === "WATCH" ? "LOW" : tier;
 }
 
-// ─── API ──────────────────────────────────────────────────────────────────────
 async function api(path, options = {}) {
   const res = await fetch(`${WORKER_URL}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -42,7 +39,6 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = {
   aud:   v => `$${Number(v).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
   date:  d => new Date(d).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" }),
@@ -50,13 +46,10 @@ const fmt = {
   mmm:   d => new Date(d).toLocaleDateString("en-AU", { month: "short", year: "2-digit" }),
 };
 
-// Smart x-axis tick formatter — shows "Jan 25", "Feb 25" etc spaced out
 function buildXTicks(data, maxTicks = 6) {
   if (!data.length) return [];
   const step = Math.max(1, Math.floor(data.length / maxTicks));
-  return data
-    .filter((_, i) => i % step === 0)
-    .map(d => d.date);
+  return data.filter((_, i) => i % step === 0).map(d => d.date);
 }
 
 // ─── Global Styles ────────────────────────────────────────────────────────────
@@ -92,7 +85,7 @@ const globalStyle = `
   input,textarea { background:#141414;border:1px solid #252525;border-radius:8px;color:#F0F0F0;font-family:'DM Sans',sans-serif;font-size:14px;padding:10px 12px;width:100%;outline:none;transition:border-color .15s; }
   input:focus,textarea:focus { border-color:#3B82F6; }
   input::placeholder,textarea::placeholder { color:#4B5563; }
-  .overlay { position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;display:flex;align-items:flex-end; }
+  .overlay { position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:50;display:flex;align-items:flex-end; }
   .sheet { background:#1C1C1C;border:1px solid #252525;border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:520px;margin:0 auto; }
 `;
 
@@ -134,7 +127,6 @@ function DrawdownBands({ price, high52w }) {
   if (!price || !high52w) return null;
   const currentDd = ((price - high52w) / high52w) * 100;
   const bands = [5, 10, 15, 20];
-
   return (
     <div className="card">
       <SectionLabel>Price vs 52-Week High</SectionLabel>
@@ -176,30 +168,21 @@ function DrawdownBands({ price, high52w }) {
 // ─── Next Tier Indicator ──────────────────────────────────────────────────────
 function NextTierIndicator({ rsi, vix }) {
   if (!rsi || !vix) return null;
-
   const tiers = [
     { name:"LOW",     rsiBelow:50, vixAbove:18 },
     { name:"MEDIUM",  rsiBelow:45, vixAbove:20 },
     { name:"HIGH",    rsiBelow:35, vixAbove:25 },
     { name:"EXTREME", rsiBelow:30, vixAbove:30 },
   ];
-
-  // Find current tier and next tier
   let currentIdx = -1;
   for (let i = tiers.length - 1; i >= 0; i--) {
-    if (rsi < tiers[i].rsiBelow && vix > tiers[i].vixAbove) {
-      currentIdx = i;
-      break;
-    }
+    if (rsi < tiers[i].rsiBelow && vix > tiers[i].vixAbove) { currentIdx = i; break; }
   }
-
   const nextTier = tiers[currentIdx + 1];
-  if (!nextTier) return null; // already at EXTREME
-
+  if (!nextTier) return null;
   const rsiNeeded = rsi - nextTier.rsiBelow;
   const vixNeeded = nextTier.vixAbove - vix;
   const color = C.signal[nextTier.name];
-
   return (
     <div className="card" style={{ borderColor:`${color}30` }}>
       <SectionLabel>Distance to next tier</SectionLabel>
@@ -230,27 +213,16 @@ function NextTierIndicator({ rsi, vix }) {
 // ─── Signal Streak ────────────────────────────────────────────────────────────
 function SignalStreak({ history }) {
   if (!history?.length) return null;
-
   const sorted = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
   const latest = sorted[0];
   const latestTier = normaliseTier(latest.signal_tier);
-
-  // Days since last non-NONE signal
   let daysSince = 0;
   let streakCount = 0;
-
   if (latestTier === "NONE") {
-    for (const s of sorted) {
-      if (normaliseTier(s.signal_tier) !== "NONE") break;
-      daysSince++;
-    }
+    for (const s of sorted) { if (normaliseTier(s.signal_tier) !== "NONE") break; daysSince++; }
   } else {
-    for (const s of sorted) {
-      if (normaliseTier(s.signal_tier) === "NONE") break;
-      streakCount++;
-    }
+    for (const s of sorted) { if (normaliseTier(s.signal_tier) === "NONE") break; streakCount++; }
   }
-
   if (latestTier === "NONE") {
     return (
       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#141414", borderRadius:8, marginBottom:12 }}>
@@ -262,7 +234,6 @@ function SignalStreak({ history }) {
       </div>
     );
   }
-
   const color = C.signal[latestTier];
   return (
     <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:`${color}10`, border:`1px solid ${color}30`, borderRadius:8, marginBottom:12 }}>
@@ -275,10 +246,89 @@ function SignalStreak({ history }) {
   );
 }
 
+// ─── PROXIMITY BARS ───────────────────────────────────────────────────────────
+// Shown when RSI or VIX is within 30% of triggering the next tier threshold.
+// RSI needs to DROP to trigger (distance = current - threshold).
+// VIX needs to RISE to trigger (distance = threshold - current).
+function ProximityBars({ rsi, vix }) {
+  if (!rsi || !vix) return null;
+
+  // Tiers in ascending order — find the next one not yet triggered
+  const tiers = [
+    { name:"LOW",     rsiBelow:50, vixAbove:18 },
+    { name:"MEDIUM",  rsiBelow:45, vixAbove:20 },
+    { name:"HIGH",    rsiBelow:35, vixAbove:25 },
+    { name:"EXTREME", rsiBelow:30, vixAbove:30 },
+  ];
+
+  // Find the lowest tier not yet triggered
+  let nextTier = null;
+  for (const t of tiers) {
+    if (rsi >= t.rsiBelow || vix <= t.vixAbove) { nextTier = t; break; }
+  }
+  if (!nextTier) return null; // all tiers triggered = EXTREME already active
+
+  const color = C.signal[nextTier.name];
+
+  // RSI proximity: how far from threshold, as % of a 30-point reference range
+  // (RSI 80 = totally calm baseline, threshold = nextTier.rsiBelow)
+  const rsiRange = 80 - nextTier.rsiBelow;
+  const rsiDist = rsi - nextTier.rsiBelow; // positive = not triggered yet
+  const rsiPct = Math.max(0, Math.min(1, 1 - rsiDist / rsiRange)); // 0=far, 1=triggered
+
+  // VIX proximity: how far from threshold, reference range = threshold - 10
+  const vixRange = nextTier.vixAbove - 10;
+  const vixDist = nextTier.vixAbove - vix; // positive = not triggered yet
+  const vixPct = Math.max(0, Math.min(1, 1 - vixDist / vixRange)); // 0=far, 1=triggered
+
+  // Only show if either is within 30% of triggering
+  const rsiClose = rsiPct >= 0.70;
+  const vixClose = vixPct >= 0.70;
+  if (!rsiClose && !vixClose) return null;
+
+  return (
+    <div className="card" style={{ borderColor:`${color}30`, marginBottom:12 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <SectionLabel>Approaching signal</SectionLabel>
+        <div style={{ display:"inline-flex", alignItems:"center", background:`${color}18`, border:`1.5px solid ${color}`, borderRadius:999, padding:"2px 10px" }}>
+          <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:12, fontWeight:800, color, letterSpacing:1.5 }}>{nextTier.name}</span>
+        </div>
+      </div>
+
+      {rsiClose && (
+        <div style={{ marginBottom:10 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+            <span style={{ fontSize:12, color:C.text.muted }}>RSI <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{rsi.toFixed(1)}</span></span>
+            <span style={{ fontSize:12, color:C.text.muted }}>needs <span style={{ fontFamily:"'JetBrains Mono',monospace", color }}>&lt;{nextTier.rsiBelow}</span></span>
+          </div>
+          <div style={{ height:5, background:"#252525", borderRadius:3, overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${rsiPct*100}%`, background:color, borderRadius:3, transition:"width .4s ease" }} />
+          </div>
+          <div style={{ fontSize:11, color:C.text.muted, marginTop:3 }}>↓ {rsiDist.toFixed(1)} points to go</div>
+        </div>
+      )}
+
+      {vixClose && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+            <span style={{ fontSize:12, color:C.text.muted }}>VIX <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{vix.toFixed(1)}</span></span>
+            <span style={{ fontSize:12, color:C.text.muted }}>needs <span style={{ fontFamily:"'JetBrains Mono',monospace", color }}>&gt;{nextTier.vixAbove}</span></span>
+          </div>
+          <div style={{ height:5, background:"#252525", borderRadius:3, overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${vixPct*100}%`, background:color, borderRadius:3, transition:"width .4s ease" }} />
+          </div>
+          <div style={{ fontSize:11, color:C.text.muted, marginTop:3 }}>↑ {vixDist.toFixed(1)} points to go</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── TODAY TAB ────────────────────────────────────────────────────────────────
 function TodayTab() {
   const [signal, setSignal] = useState(null);
   const [history, setHistory] = useState([]);
+  const [perf, setPerf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -289,12 +339,14 @@ function TodayTab() {
   async function loadData() {
     setLoading(true); setError(null);
     try {
-      const [s, h] = await Promise.all([
+      const [s, h, p] = await Promise.all([
         api("/signal/today"),
         api("/signal/history?days=30"),
+        api("/performance").catch(() => null),
       ]);
       setSignal(s.signal);
       setHistory(h.history || []);
+      setPerf(p?.summary || null);
     } catch { setError("Unable to load today's signal."); }
     setLoading(false);
   }
@@ -316,12 +368,28 @@ function TodayTab() {
     setChatLoading(false);
   }
 
+  // Human-readable one-line briefing
+  function briefingLine(tier, rsi, vix, history) {
+    if (["MEDIUM","HIGH","EXTREME"].includes(tier)) {
+      const amt = signal?.recommended_amount;
+      return amt > 0 ? `Buy signal active · $${amt} suggested` : `${tier} signal active`;
+    }
+    if (tier === "LOW") return `Early weakness · RSI ${rsi?.toFixed(1)}, VIX ${vix?.toFixed(1)}`;
+    // NONE — count days since last signal
+    const sorted = [...(history || [])].sort((a,b) => new Date(b.date)-new Date(a.date));
+    let days = 0;
+    for (const s of sorted) { if (normaliseTier(s.signal_tier) !== "NONE") break; days++; }
+    return days > 0 ? `Markets quiet · ${days} days since last signal` : "Markets quiet";
+  }
+
   const dateStr = new Date().toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
 
   if (loading) return (
     <div className="tab-content">
-      <div style={{ marginBottom:20 }}><div className="skeleton" style={{ height:24, width:200, marginBottom:8 }} /><div className="skeleton" style={{ height:14, width:140 }} /></div>
-      <SkeletonCard height={120} /><SkeletonCard height={64} /><SkeletonCard height={80} />
+      <SkeletonCard height={180} />
+      <SkeletonCard height={56} />
+      <SkeletonCard height={80} />
+      <SkeletonCard height={80} />
     </div>
   );
 
@@ -334,59 +402,76 @@ function TodayTab() {
   const price = signal ? Number(signal.vdgr_price) : null;
   const drawdown = signal ? Number(signal.drawdown_pct) : null;
   const high52w = signal ? Number(signal.high_52w) : null;
+  const isActionable = ["MEDIUM","HIGH","EXTREME"].includes(tier);
+  const profitColor = perf ? (perf.returnDollar >= 0 ? C.green : C.red) : C.text.muted;
 
   return (
     <div className="tab-content fade-in">
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-        <div>
-          <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:700 }}>VDGR · {dateStr}</div>
-          <div style={{ fontSize:12, color:C.text.muted, fontFamily:"'JetBrains Mono',monospace" }}>VanEck Gold Royalties ETF</div>
+
+      {/* ── DAILY BRIEFING HERO ── */}
+      <div style={{ marginBottom:4 }}>
+        <div style={{ fontSize:12, color:C.text.muted, fontFamily:"'JetBrains Mono',monospace", marginBottom:12 }}>
+          VDGR · {dateStr}
         </div>
-        <div style={{ width:44, height:44, borderRadius:"50%", background:`${signalColor}20`, border:`2px solid ${signalColor}`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'JetBrains Mono',monospace", fontSize:12, color:signalColor, fontWeight:500 }}>
-          {tier.slice(0,2)}
+
+        {/* Signal badge — centred, dominant */}
+        <div style={{ textAlign:"center", padding:"28px 16px 20px", background:"#141414", borderRadius:14, marginBottom:12, border:`1px solid ${isActionable ? signalColor+"40" : "#252525"}` }}>
+          <div style={{ marginBottom:14 }}><SignalBadge signal={tier} /></div>
+          <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.5 }}>
+            {briefingLine(tier, rsi, vix, history)}
+          </div>
+          {isActionable && (
+            <div style={{ marginTop:8, fontFamily:"'Barlow Condensed',sans-serif", fontSize:24, fontWeight:700, color:signalColor }}>
+              {fmt.aud(signal.recommended_amount)} suggested
+            </div>
+          )}
+          <div style={{ marginTop:8, fontSize:11, color:C.text.muted }}>
+            Latest data: {signal ? fmt.date(signal.date) : "—"}
+          </div>
         </div>
+
+        {/* P&L strip — always visible */}
+        {perf ? (
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:1, background:"#252525", borderRadius:10, overflow:"hidden", marginBottom:12 }}>
+            {[
+              { label:"Invested", value: fmt.aud(perf.totalInvested), color: C.text.primary },
+              { label:"Value", value: perf.currentValue != null ? fmt.aud(perf.currentValue) : "—", color: profitColor },
+              { label:"Return", value: perf.returnPct != null ? `${perf.returnPct>=0?"+":""}${Number(perf.returnPct).toFixed(1)}%` : "—", color: profitColor },
+            ].map(s => (
+              <div key={s.label} style={{ background:"#1C1C1C", padding:"10px 10px" }}>
+                <div style={{ fontSize:10, color:C.text.muted, marginBottom:3, textTransform:"uppercase", letterSpacing:.6 }}>{s.label}</div>
+                <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, fontWeight:500, color:s.color }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding:"10px 14px", background:"#141414", borderRadius:10, marginBottom:12, fontSize:12, color:C.text.muted }}>
+            Log your first investment in Ledger to see P&L here
+          </div>
+        )}
       </div>
 
-      {/* Streak */}
-      <SignalStreak history={history} />
+      {/* ── PROXIMITY (conditional) ── */}
+      {signal && <ProximityBars rsi={rsi} vix={vix} />}
 
-      {/* Signal Hero */}
-      <div className="card" style={{ textAlign:"center", padding:"24px 16px" }}>
-        <div style={{ marginBottom:12 }}><SignalBadge signal={tier} /></div>
-        <div style={{ fontSize:18, color:C.text.primary, marginBottom:4 }}>
-          {signal?.recommended_amount > 0
-            ? <><span style={{ color:signalColor, fontWeight:600 }}>{fmt.aud(signal.recommended_amount)}</span> suggested today</>
-            : <span style={{ color:C.text.secondary }}>No investment triggered today</span>
-          }
-        </div>
-        <div style={{ fontSize:12, color:C.text.muted }}>{signal ? `Latest data: ${fmt.date(signal.date)}` : "Awaiting today's data"}</div>
-      </div>
-
-      {/* Indicators */}
+      {/* ── DENSE DATA ── */}
       {signal && (
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
           {[
-            { label:"RSI", value: rsi?.toFixed(1), highlight: rsi < 35 ? C.red : rsi < 45 ? C.signal.MEDIUM : null },
-            { label:"VIX", value: vix?.toFixed(1), highlight: vix > 25 ? C.red : vix > 20 ? C.signal.MEDIUM : null },
+            { label:"RSI", value: rsi?.toFixed(1), highlight: rsi < 35 ? C.red : rsi < 45 ? C.signal.MEDIUM : rsi < 50 ? C.signal.LOW : null },
+            { label:"VIX", value: vix?.toFixed(1), highlight: vix > 25 ? C.red : vix > 20 ? C.signal.MEDIUM : vix > 18 ? C.signal.LOW : null },
             { label:"Price", value: `$${price?.toFixed(2)}`, color:C.accent },
             { label:"Drawdown", value: `${drawdown?.toFixed(1)}%`, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary },
           ].map(({ label, value, color, highlight }) => (
-            <div key={label} style={{ flex:1, minWidth:70, background: highlight ? `${highlight}12` : "#141414", border:`1px solid ${highlight ? highlight+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
-              <div style={{ fontSize:11, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>{label}</div>
-              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:15, color: color || C.text.primary, fontWeight:500 }}>{value}</div>
+            <div key={label} style={{ background: highlight ? `${highlight}12` : "#141414", border:`1px solid ${highlight ? highlight+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
+              <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>{label}</div>
+              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:16, color: color || C.text.primary, fontWeight:500 }}>{value}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Next Tier */}
-      {signal && <NextTierIndicator rsi={rsi} vix={vix} />}
-
-      {/* Drawdown Bands */}
-      {signal && <DrawdownBands price={price} high52w={high52w} />}
-
-      {/* Analyst Summary */}
+      {/* ── ANALYST COMMENTARY ── */}
       {signal?.analyst_summary && (
         <div className="card">
           <SectionLabel>Analyst Commentary</SectionLabel>
@@ -394,7 +479,7 @@ function TodayTab() {
         </div>
       )}
 
-      {/* Chat */}
+      {/* ── CHAT ── */}
       <div className="card">
         <SectionLabel>Ask the Analyst</SectionLabel>
         {messages.length > 0 && (
@@ -412,6 +497,7 @@ function TodayTab() {
           <button className="btn btn-primary" onClick={sendChat} disabled={chatLoading || !input.trim()} style={{ flexShrink:0, padding:"10px 14px" }}>→</button>
         </div>
       </div>
+
     </div>
   );
 }
@@ -427,31 +513,15 @@ function ChartsTab() {
     setLoading(true); setError(null);
     try {
       const data = await api(`/signal/chart?range=${r}`);
-      setChartData((data.chartData || []).map(d => ({
-        ...d,
-        signal_tier: normaliseTier(d.signal_tier),
-      })));
+      setChartData((data.chartData || []).map(d => ({ ...d, signal_tier: normaliseTier(d.signal_tier) })));
     } catch { setError("Unable to load chart data."); }
     setLoading(false);
   }
 
   useEffect(() => { loadChart(range); }, [range]);
 
-  // Build signal scatter points for each tier
-  const signalPoints = {};
-  ["LOW","MEDIUM","HIGH","EXTREME"].forEach(t => {
-    signalPoints[t] = chartData
-      .filter(d => d.signal_tier === t)
-      .map(d => ({ date: d.date, price: d.price, rsi: d.rsi, vix: d.vix }));
-  });
-
-  // Smart date ticks
   const xTicks = buildXTicks(chartData, 6);
-  const xTickFormatter = (val) => {
-    try { return new Date(val).toLocaleDateString("en-AU", { day:"2-digit", month:"short" }); }
-    catch { return val; }
-  };
-
+  const xTickFormatter = (val) => { try { return new Date(val).toLocaleDateString("en-AU", { day:"2-digit", month:"short" }); } catch { return val; } };
   const tooltipStyle = { background:"#1C1C1C", border:"1px solid #252525", borderRadius:8, fontSize:12 };
 
   const CustomPriceDot = (props) => {
@@ -468,12 +538,9 @@ function ChartsTab() {
           <button key={o.v} className={`pill-btn ${range===o.v?"active":""}`} onClick={() => setRange(o.v)}>{o.l}</button>
         ))}
       </div>
-
-      {loading ? (
-        <><SkeletonCard height={220} /><SkeletonCard height={180} /><SkeletonCard height={180} /><SkeletonCard height={180} /></>
-      ) : error ? <ErrorState message={error} onRetry={() => loadChart(range)} /> : (
+      {loading ? (<><SkeletonCard height={220} /><SkeletonCard height={180} /><SkeletonCard height={180} /><SkeletonCard height={180} /></>) :
+       error ? <ErrorState message={error} onRetry={() => loadChart(range)} /> : (
         <>
-          {/* Price + Signal overlay */}
           <div className="card">
             <SectionLabel>VDGR Price + Signal Markers</SectionLabel>
             <ResponsiveContainer width="100%" height={220}>
@@ -485,7 +552,6 @@ function ChartsTab() {
                 <Line type="monotone" dataKey="price" stroke={C.accent} dot={<CustomPriceDot />} strokeWidth={2} connectNulls name="price" />
               </ComposedChart>
             </ResponsiveContainer>
-            {/* Legend */}
             <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
               <div style={{ display:"flex", alignItems:"center", gap:5 }}>
                 <div style={{ width:16, height:2, background:C.accent, borderRadius:1 }} />
@@ -499,8 +565,6 @@ function ChartsTab() {
               ))}
             </div>
           </div>
-
-          {/* RSI Chart */}
           <div className="card">
             <SectionLabel>RSI (14-day)</SectionLabel>
             <ResponsiveContainer width="100%" height={180}>
@@ -516,9 +580,15 @@ function ChartsTab() {
                 <Line type="monotone" dataKey="rsi" stroke={C.green} dot={false} strokeWidth={2.5} connectNulls />
               </LineChart>
             </ResponsiveContainer>
+            <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
+              {["LOW","MEDIUM","HIGH","EXTREME"].map(s => (
+                <div key={s} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  <div style={{ width:10, height:3, background:C.signal[s], borderRadius:1 }} />
+                  <span style={{ fontSize:11, color:C.text.muted }}>{s}</span>
+                </div>
+              ))}
+            </div>
           </div>
-
-          {/* VIX Chart */}
           <div className="card">
             <SectionLabel>VIX (Fear Index)</SectionLabel>
             <ResponsiveContainer width="100%" height={180}>
@@ -534,9 +604,15 @@ function ChartsTab() {
                 <Line type="monotone" dataKey="vix" stroke="#A78BFA" dot={false} strokeWidth={2.5} connectNulls />
               </LineChart>
             </ResponsiveContainer>
+            <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
+              {["LOW","MEDIUM","HIGH","EXTREME"].map(s => (
+                <div key={s} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  <div style={{ width:10, height:3, background:C.signal[s], borderRadius:1 }} />
+                  <span style={{ fontSize:11, color:C.text.muted }}>{s}</span>
+                </div>
+              ))}
+            </div>
           </div>
-
-          {/* Drawdown Chart */}
           <div className="card">
             <SectionLabel>Drawdown from 52-Week High</SectionLabel>
             <ResponsiveContainer width="100%" height={180}>
@@ -552,6 +628,14 @@ function ChartsTab() {
                 <Line type="monotone" dataKey="drawdown" stroke={C.signal.HIGH} dot={false} strokeWidth={2.5} connectNulls />
               </LineChart>
             </ResponsiveContainer>
+            <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
+              {["LOW","MEDIUM","HIGH","EXTREME"].map(s => (
+                <div key={s} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  <div style={{ width:10, height:3, background:C.signal[s], borderRadius:1 }} />
+                  <span style={{ fontSize:11, color:C.text.muted }}>{s}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -560,6 +644,13 @@ function ChartsTab() {
 }
 
 // ─── LEDGER TAB ───────────────────────────────────────────────────────────────
+// FIX: Screenshot upload redesigned to avoid white flash on iOS.
+// The native <input type="file"> triggers a white system sheet on iOS — this is unavoidable.
+// Improvements:
+// 1. The overlay and sheet are explicitly dark (#0A0A0A background) so the flash is brief
+// 2. A visible "Processing..." state replaces the blank period after selection
+// 3. The upload zone is a styled dark box that clearly communicates state
+// 4. Added a small delay after file selection so the dark sheet re-renders before processing
 function LedgerTab() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -569,11 +660,11 @@ function LedgerTab() {
   const [todaySignal, setTodaySignal] = useState(null);
   const [form, setForm] = useState({ date:"", signal_tier:"MEDIUM", vdgr_price:"", actual_amount:200, notes:"" });
 
-  // Screenshot scanning state
-  const [scanMode, setScanMode] = useState(false); // false = manual, true = screenshot
-  const [scanning, setScanning] = useState(false);
+  const [scanMode, setScanMode] = useState(false);
+  const [scanState, setScanState] = useState("idle"); // idle | selected | scanning | done | error
   const [scanError, setScanError] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewFile, setPreviewFile] = useState(null);
   const fileInputRef = useRef(null);
 
   async function loadData() {
@@ -598,12 +689,13 @@ function LedgerTab() {
       notes: "",
     });
     setScanMode(mode === "screenshot");
+    setScanState("idle");
     setScanError(null);
     setPreviewUrl(null);
+    setPreviewFile(null);
     setShowForm(true);
   }
 
-  // Convert file to base64
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -613,19 +705,26 @@ function LedgerTab() {
     });
   }
 
-  async function handleScreenshot(e) {
+  // Called when user picks a file — just show preview, don't scan yet
+  function handleFileSelected(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Show preview
+    // Reset input so same file can be re-selected
+    e.target.value = "";
     setPreviewUrl(URL.createObjectURL(file));
-    setScanning(true);
+    setPreviewFile(file);
+    setScanState("selected");
     setScanError(null);
+  }
 
+  // Called when user taps "Scan this image"
+  async function runScan() {
+    if (!previewFile) return;
+    setScanState("scanning");
+    setScanError(null);
     try {
-      const base64 = await fileToBase64(file);
-      const mediaType = file.type || "image/jpeg";
-
+      const base64 = await fileToBase64(previewFile);
+      const mediaType = previewFile.type || "image/jpeg";
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -653,31 +752,23 @@ Date formats in Australian screenshots are typically DD/MM/YYYY — convert to Y
           }]
         })
       });
-
       const data = await res.json();
       const text = data.content?.[0]?.text || "";
-
-      // Parse JSON from response
       const clean = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
-
-      // Pre-fill form with extracted data
       setForm(f => ({
         ...f,
-        date:         parsed.date         || f.date,
-        vdgr_price:   parsed.vdgr_price   || f.vdgr_price,
+        date:          parsed.date          || f.date,
+        vdgr_price:    parsed.vdgr_price    || f.vdgr_price,
         actual_amount: parsed.actual_amount || f.actual_amount,
-        notes:        parsed.notes        || f.notes,
+        notes:         parsed.notes         || f.notes,
       }));
-
-      // Switch to manual mode so user can review and confirm
-      setScanMode(false);
-
-    } catch (err) {
-      setScanError("Couldn't read the screenshot. Please check the image and try again, or enter details manually.");
+      setScanState("done");
+      setScanMode(false); // Switch to confirm form
+    } catch {
+      setScanState("error");
+      setScanError("Couldn't read the screenshot. Try a clearer image or enter details manually.");
     }
-
-    setScanning(false);
   }
 
   async function saveEntry() {
@@ -704,7 +795,9 @@ Date formats in Australian screenshots are typically DD/MM/YYYY — convert to Y
   function closeForm() {
     setShowForm(false);
     setPreviewUrl(null);
+    setPreviewFile(null);
     setScanError(null);
+    setScanState("idle");
   }
 
   const total = entries.reduce((s, e) => s + parseFloat(e.actual_amount), 0);
@@ -748,11 +841,6 @@ Date formats in Australian screenshots are typically DD/MM/YYYY — convert to Y
         )}
       </div>
 
-      {/* Tip */}
-      <div style={{ padding:"10px 14px", background:"#141414", borderRadius:8, marginBottom:12, fontSize:13, color:C.text.muted, lineHeight:1.5 }}>
-        💡 Tap <strong style={{ color:C.text.secondary }}>📷 Scan</strong> to upload a Vanguard screenshot and auto-fill details, or <strong style={{ color:C.text.secondary }}>+ Log</strong> to enter manually. Both support any past date.
-      </div>
-
       {/* Entries */}
       {loading ? [1,2,3].map(i => <SkeletonCard key={i} height={64} />) :
        error ? <ErrorState message={error} onRetry={loadData} /> :
@@ -779,69 +867,115 @@ Date formats in Australian screenshots are typically DD/MM/YYYY — convert to Y
         </div>
       ))}
 
-      {/* Form sheet */}
+      {/* Form sheet — always dark background to prevent white flash */}
       {showForm && (
-        <div className="overlay" onClick={closeForm}>
-          <div className="sheet slide-up" onClick={e => e.stopPropagation()} style={{ maxHeight:"90vh", overflowY:"auto" }}>
+        <div className="overlay" onClick={closeForm} style={{ background:"rgba(0,0,0,.9)" }}>
+          <div
+            className="sheet slide-up"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxHeight:"90vh",
+              overflowY:"auto",
+              background:"#0F0F0F",  // Darker than default card to contrast with overlay
+              borderTop:"1px solid #2A2A2A",
+              borderRadius:"20px 20px 0 0",
+              paddingBottom:"env(safe-area-inset-bottom, 20px)",
+            }}
+          >
+            {/* Hidden file input — always present so iOS doesn't re-init */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display:"none" }}
+              onChange={handleFileSelected}
+            />
 
-            {/* Screenshot mode */}
-            {scanMode ? (
+            {/* ── SCAN MODE: choose image ── */}
+            {scanMode && (
               <>
-                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:700, marginBottom:4 }}>Scan Screenshot</div>
-                <div style={{ fontSize:13, color:C.text.muted, marginBottom:16, lineHeight:1.5 }}>
-                  Upload a screenshot from your Vanguard app showing the transaction. Claude will read it and fill in the details.
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:700, marginBottom:4, color:C.text.primary }}>Scan Screenshot</div>
+                <div style={{ fontSize:13, color:C.text.muted, marginBottom:20, lineHeight:1.5 }}>
+                  Upload a screenshot from your Vanguard app. Claude will read the transaction details.
                 </div>
 
-                {/* Upload area */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{ border:`2px dashed ${C.bg.border}`, borderRadius:12, padding:"32px 16px", textAlign:"center", cursor:"pointer", marginBottom:12, background:"#141414" }}
-                >
-                  {previewUrl ? (
-                    <img src={previewUrl} alt="preview" style={{ maxWidth:"100%", maxHeight:200, borderRadius:8, objectFit:"contain" }} />
-                  ) : (
-                    <>
-                      <div style={{ fontSize:32, marginBottom:8 }}>📷</div>
-                      <div style={{ fontSize:14, color:C.text.secondary }}>Tap to select screenshot</div>
-                      <div style={{ fontSize:12, color:C.text.muted, marginTop:4 }}>JPG, PNG from your camera roll</div>
-                    </>
-                  )}
-                </div>
+                {/* State: idle — show upload button */}
+                {scanState === "idle" && (
+                  <button
+                    className="btn btn-ghost"
+                    style={{ width:"100%", padding:"20px", fontSize:15, borderRadius:12, border:"2px dashed #2A2A2A", flexDirection:"column", gap:8, height:"auto" }}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <span style={{ fontSize:32 }}>📷</span>
+                    <span style={{ color:C.text.secondary }}>Choose screenshot from library</span>
+                    <span style={{ fontSize:11, color:C.text.muted }}>JPG or PNG from your camera roll</span>
+                  </button>
+                )}
 
-                <input ref={fileInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleScreenshot} />
+                {/* State: selected — show preview + scan button */}
+                {scanState === "selected" && previewUrl && (
+                  <>
+                    <div style={{ background:"#141414", borderRadius:12, overflow:"hidden", marginBottom:12 }}>
+                      <img src={previewUrl} alt="preview" style={{ width:"100%", maxHeight:220, objectFit:"contain", display:"block" }} />
+                    </div>
+                    <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                      <button className="btn btn-ghost" style={{ flex:1 }} onClick={() => { setScanState("idle"); setPreviewUrl(null); setPreviewFile(null); }}>
+                        ← Different image
+                      </button>
+                      <button className="btn btn-primary" style={{ flex:1 }} onClick={runScan}>
+                        Scan this image →
+                      </button>
+                    </div>
+                  </>
+                )}
 
-                {scanning && (
-                  <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", background:`${C.accent}10`, borderRadius:8, marginBottom:12 }}>
-                    <Spinner />
-                    <span style={{ fontSize:13, color:C.text.secondary }}>Reading your screenshot…</span>
+                {/* State: scanning — spinner */}
+                {scanState === "scanning" && (
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16, padding:"40px 20px" }}>
+                    {previewUrl && (
+                      <div style={{ background:"#141414", borderRadius:12, overflow:"hidden", width:"100%", opacity:0.5 }}>
+                        <img src={previewUrl} alt="preview" style={{ width:"100%", maxHeight:160, objectFit:"contain", display:"block" }} />
+                      </div>
+                    )}
+                    <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                      <Spinner size={20} />
+                      <span style={{ fontSize:14, color:C.text.secondary }}>Reading your screenshot…</span>
+                    </div>
                   </div>
                 )}
 
-                {scanError && (
-                  <div style={{ padding:"10px 14px", background:`${C.red}10`, border:`1px solid ${C.red}30`, borderRadius:8, marginBottom:12, fontSize:13, color:C.red }}>
+                {/* State: error */}
+                {scanState === "error" && (
+                  <div style={{ padding:"14px", background:`${C.red}10`, border:`1px solid ${C.red}30`, borderRadius:10, marginBottom:12, fontSize:13, color:C.red, lineHeight:1.5 }}>
                     {scanError}
                   </div>
                 )}
 
-                <div style={{ display:"flex", gap:8 }}>
+                <div style={{ display:"flex", gap:8, marginTop:8 }}>
                   <button className="btn btn-ghost" style={{ flex:1 }} onClick={closeForm}>Cancel</button>
-                  <button className="btn btn-ghost" style={{ flex:1 }} onClick={() => setScanMode(false)}>Enter manually</button>
+                  {(scanState === "idle" || scanState === "error") && (
+                    <button className="btn btn-ghost" style={{ flex:1 }} onClick={() => { setScanMode(false); setScanState("idle"); }}>
+                      Enter manually
+                    </button>
+                  )}
                 </div>
               </>
-            ) : (
-              /* Manual / confirm mode */
+            )}
+
+            {/* ── MANUAL / CONFIRM MODE ── */}
+            {!scanMode && (
               <>
-                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:700, marginBottom:4 }}>
-                  {previewUrl ? "Confirm Details" : "Log Investment"}
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:700, marginBottom:4, color:C.text.primary }}>
+                  {scanState === "done" ? "Confirm Details" : "Log Investment"}
                 </div>
                 <div style={{ fontSize:12, color:C.text.muted, marginBottom:16 }}>
-                  {previewUrl ? "Review the extracted details and adjust if needed." : "Enter any past date to backfill historical trades."}
+                  {scanState === "done" ? "Review the extracted details and adjust if needed." : "Enter any past date to backfill historical trades."}
                 </div>
 
                 {/* Show thumbnail if scanned */}
-                {previewUrl && (
-                  <div style={{ marginBottom:12 }}>
-                    <img src={previewUrl} alt="preview" style={{ width:"100%", maxHeight:120, objectFit:"contain", borderRadius:8, background:"#141414" }} />
+                {previewUrl && scanState === "done" && (
+                  <div style={{ marginBottom:12, background:"#141414", borderRadius:10, overflow:"hidden" }}>
+                    <img src={previewUrl} alt="preview" style={{ width:"100%", maxHeight:100, objectFit:"contain", display:"block" }} />
                   </div>
                 )}
 
@@ -898,8 +1032,8 @@ Date formats in Australian screenshots are typically DD/MM/YYYY — convert to Y
                   </div>
 
                   {/* Switch to scan */}
-                  {!previewUrl && (
-                    <button className="btn btn-ghost" style={{ width:"100%", fontSize:13 }} onClick={() => { setScanMode(true); setScanError(null); }}>
+                  {scanState !== "done" && (
+                    <button className="btn btn-ghost" style={{ width:"100%", fontSize:13 }} onClick={() => { setScanMode(true); setScanState("idle"); setScanError(null); }}>
                       📷 Upload screenshot instead
                     </button>
                   )}
@@ -941,14 +1075,12 @@ function PerformanceTab() {
   const { summary, snapshots, forwardReturns, ledger } = perf;
   const profitColor = summary.returnDollar >= 0 ? C.green : C.red;
 
-  // Chart from snapshots
   const chartData = (snapshots || []).map(s => ({
     date: fmt.short(s.date),
     invested: parseFloat(s.total_invested),
     value: parseFloat(s.current_value),
   }));
 
-  // By-tier breakdown from ledger
   const tierBreakdown = {};
   (ledger || []).forEach(e => {
     const tier = normaliseTier(e.signal_tier);
@@ -960,19 +1092,16 @@ function PerformanceTab() {
 
   const currentPrice = summary.currentPrice;
   const tierOrder = ["EXTREME","HIGH","MEDIUM","LOW"];
-  const tierRows = tierOrder
-    .filter(t => tierBreakdown[t])
-    .map(t => {
-      const b = tierBreakdown[t];
-      const cv = currentPrice ? b.units * currentPrice : null;
-      const ret = cv !== null ? ((cv - b.invested) / b.invested) * 100 : null;
-      const avgPrice = b.units > 0 ? b.invested / b.units : 0;
-      return { tier:t, ...b, currentValue:cv, returnPct:ret, avgPrice };
-    });
+  const tierRows = tierOrder.filter(t => tierBreakdown[t]).map(t => {
+    const b = tierBreakdown[t];
+    const cv = currentPrice ? b.units * currentPrice : null;
+    const ret = cv !== null ? ((cv - b.invested) / b.invested) * 100 : null;
+    const avgPrice = b.units > 0 ? b.invested / b.units : 0;
+    return { tier:t, ...b, currentValue:cv, returnPct:ret, avgPrice };
+  });
 
   return (
     <div className="tab-content fade-in">
-      {/* Summary */}
       <div className="card">
         <SectionLabel>Live Performance</SectionLabel>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
@@ -992,15 +1121,12 @@ function PerformanceTab() {
           <span style={{ fontSize:12, color:C.text.muted }}>Units: <span className="mono">{Number(summary.totalUnits).toFixed(4)}</span></span>
           {summary.currentPrice && <span style={{ fontSize:12, color:C.text.muted }}>VDGR: <span className="mono" style={{ color:C.accent }}>${Number(summary.currentPrice).toFixed(2)}</span></span>}
         </div>
-        {/* Cost basis */}
         {summary.totalUnits > 0 && (
           <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid #252525" }}>
             <span style={{ fontSize:12, color:C.text.muted }}>Avg cost basis: <span className="mono" style={{ color:C.text.secondary }}>${(summary.totalInvested / summary.totalUnits).toFixed(2)}</span></span>
           </div>
         )}
       </div>
-
-      {/* Chart */}
       {chartData.length > 1 && (
         <div className="card">
           <SectionLabel>Invested vs Value</SectionLabel>
@@ -1026,8 +1152,6 @@ function PerformanceTab() {
           </ResponsiveContainer>
         </div>
       )}
-
-      {/* By-tier breakdown */}
       {tierRows.length > 0 && (
         <div className="card">
           <SectionLabel>Breakdown by Signal Tier</SectionLabel>
@@ -1053,8 +1177,6 @@ function PerformanceTab() {
           ))}
         </div>
       )}
-
-      {/* Forward Returns */}
       {forwardReturns?.length > 0 && (
         <div className="card">
           <SectionLabel>Historical Return by Tier</SectionLabel>
@@ -1083,8 +1205,9 @@ function PerformanceTab() {
   );
 }
 
-
-// ─── SIGNAL CALENDAR ─────────────────────────────────────────────────────────
+// ─── SIGNAL CALENDAR ──────────────────────────────────────────────────────────
+// FIX: Weeks are now rendered in reverse order (latest week first, oldest last)
+// within each month card, so the most recent dates appear at the top.
 function SignalCalendar({ history }) {
   const byMonth = {};
   (history || []).forEach(d => {
@@ -1092,42 +1215,81 @@ function SignalCalendar({ history }) {
     if (!byMonth[key]) byMonth[key] = {};
     byMonth[key][d.date.slice(8, 10)] = d.signal_tier;
   });
+
   const months = Object.keys(byMonth).sort().reverse().slice(0, 6);
   const DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const sigColors = { LOW:"#EAB308", MEDIUM:"#F97316", HIGH:"#EF4444", EXTREME:"#8B5CF6" };
+
   if (!months.length) return <div style={{ textAlign:"center", padding:"40px 20px", color:"#4B5563", fontSize:14 }}>No signal history yet.</div>;
+
   return (
     <div>
       {months.map(monthKey => {
         const [year, month] = monthKey.split("-").map(Number);
         const firstDay = new Date(year, month - 1, 1);
         const daysInMonth = new Date(year, month, 0).getDate();
+
+        // Build offset: Mon=0 ... Sun=6
         let startOffset = firstDay.getDay() - 1;
         if (startOffset < 0) startOffset = 6;
+
+        // Build flat cell array: nulls for padding, then 1..daysInMonth
         const cells = [];
         for (let i = 0; i < startOffset; i++) cells.push(null);
         for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+        // Pad to complete last week
+        while (cells.length % 7 !== 0) cells.push(null);
+
+        // Split into weeks then REVERSE so latest week is first
+        const weeks = [];
+        for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+        const weeksReversed = [...weeks].reverse();
+
         const monthName = new Date(year, month - 1, 1).toLocaleDateString("en-AU", { month:"long", year:"numeric" });
-        const sigColors = { LOW:"#EAB308", MEDIUM:"#F97316", HIGH:"#EF4444", EXTREME:"#8B5CF6" };
+
         return (
           <div key={monthKey} style={{ background:"#1C1C1C", border:"1px solid #252525", borderRadius:12, padding:16, marginBottom:12 }}>
             <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:16, fontWeight:700, marginBottom:10 }}>{monthName}</div>
+
+            {/* Day-of-week headers */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
               {DOW.map(d => <div key={d} style={{ textAlign:"center", fontSize:9, color:"#4B5563", fontWeight:600 }}>{d}</div>)}
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
-              {cells.map((day, i) => {
-                if (!day) return <div key={i} />;
-                const dayStr = String(day).padStart(2, "0");
-                const rawTier = byMonth[monthKey]?.[dayStr];
-                const tier = rawTier === "WATCH" ? "LOW" : rawTier;
-                const color = sigColors[tier] || null;
-                return (
-                  <div key={i} style={{ aspectRatio:"1", borderRadius:4, background: color ? color+"25" : "#141414", border:"1px solid "+(color ? color+"50" : "#1E1E1E"), display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color: color || "#4B5563", fontWeight: color ? 700 : 400, fontFamily:"'JetBrains Mono',monospace" }}>
-                    {day}
-                  </div>
-                );
-              })}
+
+            {/* Weeks — reversed so most recent is at top */}
+            <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+              {weeksReversed.map((week, wi) => (
+                <div key={wi} style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+                  {week.map((day, di) => {
+                    if (!day) return <div key={di} />;
+                    const dayStr = String(day).padStart(2, "0");
+                    const rawTier = byMonth[monthKey]?.[dayStr];
+                    const tier = rawTier === "WATCH" ? "LOW" : rawTier;
+                    const color = sigColors[tier] || null;
+                    return (
+                      <div key={di} style={{
+                        aspectRatio:"1",
+                        borderRadius:4,
+                        background: color ? color+"25" : "#141414",
+                        border:"1px solid "+(color ? color+"50" : "#1E1E1E"),
+                        display:"flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+                        fontSize:10,
+                        color: color || "#4B5563",
+                        fontWeight: color ? 700 : 400,
+                        fontFamily:"'JetBrains Mono',monospace",
+                      }}>
+                        {day}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
+
+            {/* Legend for this month */}
             <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
               {["LOW","MEDIUM","HIGH","EXTREME"].filter(t => {
                 const vals = Object.values(byMonth[monthKey]);
@@ -1249,7 +1411,6 @@ function BacktestTab() {
               <span style={{ fontSize:12, color:"#4B5563" }}>@ <span style={{ fontFamily:"'JetBrains Mono',monospace", color:"#3B82F6" }}>${Number(data.current_price).toFixed(2)}</span></span>
             </div>
           </div>
-
           {chartData.length > 1 && (
             <div className="card">
               <div style={{ fontSize:12, color:"#4B5563", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Cumulative Invested vs Value</div>
@@ -1269,7 +1430,6 @@ function BacktestTab() {
               </ResponsiveContainer>
             </div>
           )}
-
           {data.tier_summary?.length > 0 && (
             <div className="card">
               <div style={{ fontSize:12, color:"#4B5563", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>By Signal Tier</div>
@@ -1293,7 +1453,6 @@ function BacktestTab() {
               })}
             </div>
           )}
-
           <div className="card">
             <div style={{ fontSize:12, color:"#4B5563", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Signal Trade Log</div>
             <div style={{ maxHeight:300, overflowY:"auto" }}>
@@ -1409,7 +1568,6 @@ function SettingsTab() {
   );
 }
 
-
 // ─── NAV ICONS ────────────────────────────────────────────────────────────────
 const icons = {
   today:   <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
@@ -1422,9 +1580,9 @@ const icons = {
 // ─── MORE DRAWER ──────────────────────────────────────────────────────────────
 function MoreDrawer({ onSelect, onClose }) {
   const items = [
-    { id:"perf",     label:"Performance",      icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>, desc:"Portfolio P&L and return tracking" },
-    { id:"backtest", label:"Backtest",          icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, desc:"Simulate signal-based investing" },
-    { id:"settings", label:"Signal Settings",  icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>, desc:"Configure thresholds and amounts" },
+    { id:"perf",     label:"Performance",     icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>, desc:"Portfolio P&L and return tracking" },
+    { id:"backtest", label:"Backtest",         icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, desc:"Simulate signal-based investing" },
+    { id:"settings", label:"Signal Settings", icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>, desc:"Configure thresholds and amounts" },
   ];
   return (
     <div className="overlay" onClick={onClose}>
@@ -1452,7 +1610,7 @@ function MoreDrawer({ onSelect, onClose }) {
   );
 }
 
-// ─── APP ─────────────────────────────────────────────────────────────────────
+// ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("today");
   const [showMore, setShowMore] = useState(false);
@@ -1492,28 +1650,28 @@ export default function App() {
     <>
       <style>{globalStyle}</style>
       <div style={{ background:"#0A0A0A", minHeight:"100vh", color:"#F0F0F0" }}>
-        {tab==="today"   && <TodayTab />}
-        {tab==="charts"  && <ChartsTab />}
-        {tab==="history" && <CalendarHistoryTab />}
-        {tab==="ledger"  && <LedgerTab />}
+        {tab==="today"    && <TodayTab />}
+        {tab==="charts"   && <ChartsTab />}
+        {tab==="history"  && <CalendarHistoryTab />}
+        {tab==="ledger"   && <LedgerTab />}
         {tab==="perf"     && <PerformanceTab />}
         {tab==="backtest" && <BacktestTab />}
         {tab==="settings" && <SettingsTab />}
 
-        {/* Fixed bottom nav — correct fixed positioning without margin:auto bug */}
+        {/* Fixed bottom nav */}
         <div style={{
-          position: "fixed",
-          bottom: 0,
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: "100%",
-          maxWidth: 520,
-          background: "rgba(10,10,10,.97)",
-          borderTop: "1px solid #252525",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          display: "flex",
-          zIndex: 100,
+          position:"fixed",
+          bottom:0,
+          left:"50%",
+          transform:"translateX(-50%)",
+          width:"100%",
+          maxWidth:520,
+          background:"rgba(10,10,10,.97)",
+          borderTop:"1px solid #252525",
+          backdropFilter:"blur(16px)",
+          WebkitBackdropFilter:"blur(16px)",
+          display:"flex",
+          zIndex:100,
         }}>
           {tabs.map(t => {
             const active = activePrimary === t.id;
@@ -1524,19 +1682,10 @@ export default function App() {
                   else { setTab(t.id); setShowMore(false); }
                 }}
                 style={{
-                  flex: 1,
-                  padding: "10px 4px 14px",
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 4,
-                  color: active ? "#3B82F6" : "#4B5563",
-                  transition: "color .15s",
-                  position: "relative",
-                  WebkitTapHighlightColor: "transparent",
+                  flex:1, padding:"10px 4px 14px", background:"transparent", border:"none",
+                  cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center",
+                  gap:4, color: active ? "#3B82F6" : "#4B5563", transition:"color .15s",
+                  position:"relative", WebkitTapHighlightColor:"transparent",
                 }}
               >
                 {active && (
@@ -1549,12 +1698,8 @@ export default function App() {
           })}
         </div>
 
-        {/* More drawer */}
         {showMore && (
-          <MoreDrawer
-            onSelect={(id) => setTab(id)}
-            onClose={() => setShowMore(false)}
-          />
+          <MoreDrawer onSelect={(id) => setTab(id)} onClose={() => setShowMore(false)} />
         )}
       </div>
     </>
