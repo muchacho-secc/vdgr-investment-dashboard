@@ -507,48 +507,53 @@ function TodayTab() {
   return (
     <div className="tab-content fade-in">
 
-      {/* ── DAYS SINCE LAST SIGNAL (NONE state only) ── */}
-      {tier === "NONE" && daysSinceSignal > 0 && (
-        <div className="card" style={{ textAlign:"center", padding:"32px 20px", marginBottom:12 }}>
-          <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:72, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
-            {daysSinceSignal}
-          </div>
-          <div style={{ fontSize:14, color:C.text.muted, marginTop:8 }}>days since last signal</div>
-        </div>
-      )}
-
-      {/* ── DAILY BRIEFING HERO ── */}
+      {/* ── COMBINED SIGNAL HERO ── */}
       <div style={{ marginBottom:4 }}>
-        {/* Signal badge — centred, dominant */}
-        <div style={{ textAlign:"center", padding:"28px 16px 20px", background:"#141414", borderRadius:14, marginBottom:12, border:`1px solid ${isActionable ? signalColor+"40" : "#252525"}` }}>
-          <div style={{ marginBottom:14 }}><SignalBadge signal={tier} /></div>
-          <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.5 }}>
-            {briefingLine(tier, rsi, vix, history)}
-          </div>
-          {isActionable && (
-            <div style={{ marginTop:8, fontFamily:"'Barlow Condensed',sans-serif", fontSize:24, fontWeight:700, color:signalColor }}>
-              {fmt.aud(signal.recommended_amount)} suggested
+        <div className="card" style={{ padding:"20px 16px", marginBottom:12, border:`1px solid ${isActionable ? signalColor+"40" : "#252525"}`, maxHeight:160 }}>
+          <div style={{ display:"flex", gap:16, alignItems:"center", minHeight:120 }}>
+            {/* Left: Days counter (NONE state only) */}
+            {tier === "NONE" && daysSinceSignal > 0 ? (
+              <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:56, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
+                  {daysSinceSignal}
+                </div>
+                <div style={{ fontSize:11, color:C.text.muted, marginTop:6, textAlign:"center", whiteSpace:"pre-line" }}>
+                  {"days since\nlast signal"}
+                </div>
+              </div>
+            ) : (
+              <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:56, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
+                  —
+                </div>
+                <div style={{ fontSize:11, color:C.text.muted, marginTop:6, textAlign:"center" }}>
+                  Signal active
+                </div>
+              </div>
+            )}
+
+            {/* Vertical divider */}
+            <div style={{ width:1, height:100, background:"#252525" }} />
+
+            {/* Right: Signal badge and info */}
+            <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
+              <SignalBadge signal={tier} />
+              {isActionable ? (
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18, fontWeight:700, color:signalColor }}>
+                  {fmt.aud(signal.recommended_amount)}
+                </div>
+              ) : (
+                <div style={{ fontSize:13, color:C.text.muted }}>No investment</div>
+              )}
+              <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
+                {signal ? fmt.date(signal.date) : "—"}
+              </div>
+              {signal?.date && (
+                <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
+                  {getNextUpdate(signal.date)}
+                </div>
+              )}
             </div>
-          )}
-          <div style={{ marginTop:8, fontSize:11, color:C.text.muted }}>
-            Latest data: {signal ? fmt.date(signal.date) : "—"}
-          </div>
-          {signal?.date && (
-            <div style={{ fontSize:11, color:C.text.muted, marginTop:4 }}>
-              Next update: {getNextUpdate(signal.date)}
-            </div>
-          )}
-          {/* 30-day sparkline */}
-          <div style={{ marginTop:12 }}>
-            {sparklineLoading ? (
-              <div style={{ height:60, background:"#0A0A0A", borderRadius:6 }} className="skeleton" />
-            ) : sparklineData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={60}>
-                <LineChart data={sparklineData}>
-                  <Line type="monotone" dataKey="price" stroke={C.accent} strokeWidth={2} dot={false} connectNulls />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : null}
           </div>
         </div>
 
@@ -1271,11 +1276,68 @@ function PerformanceTab() {
   const { summary, snapshots, forwardReturns, ledger } = perf;
   const profitColor = summary.returnDollar >= 0 ? C.green : C.red;
 
-  const chartData = (snapshots || []).map(s => ({
-    date: fmt.short(s.date),
-    invested: parseFloat(s.total_invested),
-    value: parseFloat(s.current_value),
-  }));
+  // Build daily time series for portfolio growth chart
+  const buildDailyTimeSeries = () => {
+    if (!ledger || ledger.length === 0) return [];
+
+    // Sort ledger by date
+    const sortedLedger = [...ledger].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const firstBuyDate = new Date(sortedLedger[0].date);
+    const today = new Date();
+
+    // Create price lookup from signal history
+    const priceByDate = {};
+    (historyData || []).forEach(h => {
+      priceByDate[h.date] = parseFloat(h.vdgr_price);
+    });
+
+    // Build ledger lookup
+    const buysByDate = {};
+    sortedLedger.forEach(e => {
+      if (!buysByDate[e.date]) buysByDate[e.date] = [];
+      buysByDate[e.date].push(e);
+    });
+
+    // Generate daily data
+    const dailyData = [];
+    let runningInvested = 0;
+    let runningUnits = 0;
+    let lastKnownPrice = null;
+
+    for (let d = new Date(firstBuyDate); d <= today; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+
+      // Update running totals if there's a buy today
+      if (buysByDate[dateStr]) {
+        buysByDate[dateStr].forEach(e => {
+          runningInvested += parseFloat(e.actual_amount);
+          runningUnits += parseFloat(e.units_acquired);
+        });
+      }
+
+      // Get price for today (or forward-fill from last known)
+      const todayPrice = priceByDate[dateStr];
+      if (todayPrice) lastKnownPrice = todayPrice;
+
+      // Calculate portfolio value
+      const portfolioValue = runningUnits * (lastKnownPrice || 0);
+
+      // Only add to chart if we have data
+      if (runningInvested > 0) {
+        dailyData.push({
+          date: dateStr,
+          dateFormatted: d.toLocaleDateString("en-AU", { day:"2-digit", month:"short" }),
+          invested: runningInvested,
+          value: portfolioValue,
+          isBuyDay: !!buysByDate[dateStr],
+        });
+      }
+    }
+
+    return dailyData;
+  };
+
+  const chartData = buildDailyTimeSeries();
 
   const tierBreakdown = {};
   (ledger || []).forEach(e => {
@@ -1326,16 +1388,20 @@ function PerformanceTab() {
       {chartData.length > 1 && (
         <div className="card">
           <SectionLabel>Portfolio Growth</SectionLabel>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={chartData}>
               <defs>
-                <linearGradient id="valGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={C.green} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={C.green} stopOpacity={0} />
+                <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F0F0F0" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#F0F0F0" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="investedGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F97316" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#252525" />
-              <XAxis dataKey="date" tick={{ fill:C.text.muted, fontSize:10 }} />
+              <XAxis dataKey="dateFormatted" tick={{ fill:C.text.muted, fontSize:10 }} />
               <YAxis tick={{ fill:C.text.muted, fontSize:11 }} width={55} tickFormatter={v => `$${Number(v).toFixed(0)}`} />
               <Tooltip
                 contentStyle={{ background:"#1C1C1C", border:"1px solid #252525", borderRadius:8, fontSize:12 }}
@@ -1348,43 +1414,27 @@ function PerformanceTab() {
                   if (!payload || !payload[0]) return label;
                   const data = payload[0].payload;
                   const profit = data.value - data.invested;
-                  return `${label} · ${profit >= 0 ? "+" : ""}${fmt.aud(profit)} P/L`;
+                  const returnPct = data.invested > 0 ? ((profit / data.invested) * 100).toFixed(1) : "0.0";
+                  return `${label} · ${profit >= 0 ? "+" : ""}${fmt.aud(profit)} (${returnPct}%)`;
                 }}
               />
-              {/* Cost basis line */}
-              {summary.totalUnits > 0 && (
-                <ReferenceLine
-                  y={summary.totalInvested / summary.totalUnits}
-                  stroke="rgba(255,255,255,0.4)"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: `Avg Cost $${(summary.totalInvested / summary.totalUnits).toFixed(2)}`,
-                    position: "insideTopRight",
-                    fill: "rgba(255,255,255,0.6)",
-                    fontSize: 10,
-                  }}
-                />
-              )}
-              {/* Portfolio value area */}
-              <Area type="monotone" dataKey="value" stroke={C.green} fill="url(#valGrad)" strokeWidth={2.5} name="value" />
-              {/* Total invested line */}
-              <Line type="stepAfter" dataKey="invested" stroke={C.accent} strokeWidth={2} dot={false} name="invested" />
-              {/* Buy markers */}
+              {/* Total invested area (orange) */}
+              <Area type="monotone" dataKey="invested" stroke="#F97316" fill="url(#investedGrad)" strokeWidth={2} name="invested" />
+              {/* Portfolio value area (white/black) */}
+              <Area type="monotone" dataKey="value" stroke="#F0F0F0" fill="url(#portfolioGrad)" strokeWidth={2} name="value" />
+              {/* Buy markers - orange diamonds */}
               <Scatter
-                data={(ledger || []).map(e => ({
-                  date: fmt.short(e.date),
-                  value: parseFloat(e.actual_amount),
-                  tier: normaliseTier(e.signal_tier),
-                }))}
+                data={chartData.filter(d => d.isBuyDay)}
+                fill="#F97316"
                 shape={(props) => {
-                  const { cx, cy, payload } = props;
-                  if (!payload.tier) return null;
-                  const color = C.signal[payload.tier];
+                  const { cx, cy } = props;
                   return (
-                    <g>
-                      <line x1={cx} y1={cy - 12} x2={cx} y2={cy + 4} stroke={color} strokeWidth={2} />
-                      <circle cx={cx} cy={cy - 12} r={4} fill={color} stroke="#0A0A0A" strokeWidth={1.5} />
-                    </g>
+                    <path
+                      d={`M ${cx},${cy - 6} L ${cx + 4},${cy} L ${cx},${cy + 6} L ${cx - 4},${cy} Z`}
+                      fill="#F97316"
+                      stroke="#0A0A0A"
+                      strokeWidth={1}
+                    />
                   );
                 }}
               />
@@ -1823,6 +1873,7 @@ const icons = {
   today:   <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
   charts:  <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   history: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  perf:    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
   ledger:  <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
   more:    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>,
 };
@@ -1933,7 +1984,7 @@ export default function App() {
     { id:"today",       label:"Today",       icon:icons.today },
     { id:"charts",      label:"Charts",      icon:icons.charts },
     { id:"history",     label:"History",     icon:icons.history },
-    { id:"perf",        label:"Performance", icon:icons.ledger },
+    { id:"perf",        label:"Performance", icon:icons.perf },
     { id:"more",        label:"More",        icon:icons.more },
   ];
 
