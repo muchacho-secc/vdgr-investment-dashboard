@@ -68,7 +68,7 @@ const globalStyle = `
   .fade-in { animation: fadeIn .35s ease both; }
   .slide-up { animation: slideUp .3s cubic-bezier(.16,1,.3,1) both; }
   .skeleton { background: linear-gradient(90deg,#1C1C1C 25%,#252525 50%,#1C1C1C 75%); background-size:400px 100%; animation:shimmer 1.4s infinite; border-radius:6px; }
-  .tab-content { padding: 16px 16px 100px; max-width: 520px; margin: 0 auto; min-height: calc(100vh - 56px); }
+  .tab-content { padding: 72px 16px 100px; max-width: 520px; margin: 0 auto; min-height: calc(100vh - 56px); }
   .card { background:#1C1C1C; border:1px solid #252525; border-radius:12px; padding:16px; margin-bottom:12px; }
   .btn { display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;transition:all .15s; }
   .btn:active { transform:scale(.97); }
@@ -275,8 +275,8 @@ function SignalStreak({ history }) {
   );
 }
 
-// ─── NEXT SIGNAL ──────────────────────────────────────────────────────────────
-// Simplified display showing distance to next signal tier
+// ─── SIGNAL PROXIMITY GAUGE ───────────────────────────────────────────────────
+// Circular arc gauge showing progress toward next signal tier
 function ProximityBars({ rsi, vix }) {
   if (!rsi || !vix) return null;
 
@@ -299,32 +299,80 @@ function ProximityBars({ rsi, vix }) {
   const rsiDist = rsi - nextTier.rsiBelow; // positive = not triggered yet
   const vixDist = nextTier.vixAbove - vix; // positive = not triggered yet
 
+  // Calculate combined progress score
+  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+  const rsiProgress = clamp((rsi - nextTier.rsiBelow) / 15 * 100, 0, 100);
+  const vixProgress = clamp((nextTier.vixAbove - vix) / 10 * 100, 0, 100);
+  const combinedScore = Math.round((rsiProgress + vixProgress) / 2);
+
+  // SVG arc parameters
+  const size = 160;
+  const strokeWidth = 12;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const arcLength = circumference * 0.75; // 270 degree arc
+  const offset = circumference * 0.125; // start at top-right
+  const progressLength = (arcLength * combinedScore) / 100;
+
   return (
     <div className="card" style={{ borderColor:`${color}30`, marginBottom:12 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-        <SectionLabel>Next Signal</SectionLabel>
-        <div style={{ display:"inline-flex", alignItems:"center", background:`${color}18`, border:`1.5px solid ${color}`, borderRadius:999, padding:"2px 10px" }}>
-          <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:12, fontWeight:800, color, letterSpacing:1.5 }}>{nextTier.name}</span>
+      <SectionLabel>Signal Proximity</SectionLabel>
+
+      {/* Circular gauge */}
+      <div style={{ display:"flex", justifyContent:"center", marginTop:16, marginBottom:16 }}>
+        <div style={{ position:"relative", width:size, height:size }}>
+          <svg width={size} height={size} style={{ transform:"rotate(135deg)" }}>
+            {/* Background track */}
+            <circle
+              cx={size/2}
+              cy={size/2}
+              r={radius}
+              fill="none"
+              stroke="#252525"
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${arcLength} ${circumference}`}
+              strokeDashoffset={-offset}
+              strokeLinecap="round"
+            />
+            {/* Progress arc */}
+            <circle
+              cx={size/2}
+              cy={size/2}
+              r={radius}
+              fill="none"
+              stroke={color}
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${progressLength} ${circumference}`}
+              strokeDashoffset={-offset}
+              strokeLinecap="round"
+              style={{ transition:"stroke-dasharray 0.6s ease" }}
+            />
+          </svg>
+          {/* Center text */}
+          <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%, -50%)", textAlign:"center" }}>
+            <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:28, fontWeight:800, color, lineHeight:1 }}>
+              {combinedScore}%
+            </div>
+            <div style={{ fontSize:11, color:C.text.muted, marginTop:4 }}>to {nextTier.name}</div>
+          </div>
         </div>
       </div>
 
-      {/* RSI row */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-        <span style={{ fontSize:13, color:C.text.muted }}>RSI</span>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color:C.text.secondary }}>{rsi.toFixed(1)}</span>
-          <span style={{ fontSize:13, color:C.text.muted }}>↓</span>
-          <span style={{ fontSize:13, color:C.text.muted }}>{rsiDist.toFixed(1)} points to go</span>
+      {/* Detail rows */}
+      <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:12 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:12, color:C.text.muted }}>RSI</span>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, color:C.text.secondary }}>{rsi.toFixed(1)}</span>
+            <span style={{ fontSize:11, color:C.text.muted }}>· {rsiDist.toFixed(1)} to threshold</span>
+          </div>
         </div>
-      </div>
-
-      {/* VIX row */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span style={{ fontSize:13, color:C.text.muted }}>VIX</span>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color:C.text.secondary }}>{vix.toFixed(1)}</span>
-          <span style={{ fontSize:13, color:C.text.muted }}>↑</span>
-          <span style={{ fontSize:13, color:C.text.muted }}>{vixDist.toFixed(1)} points to go</span>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:12, color:C.text.muted }}>VIX</span>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, color:C.text.secondary }}>{vix.toFixed(1)}</span>
+            <span style={{ fontSize:11, color:C.text.muted }}>· {vixDist.toFixed(1)} to threshold</span>
+          </div>
         </div>
       </div>
     </div>
@@ -451,15 +499,26 @@ function TodayTab() {
   const isActionable = ["MEDIUM","HIGH","EXTREME"].includes(tier);
   const profitColor = perf ? (perf.returnDollar >= 0 ? C.green : C.red) : C.text.muted;
 
+  // Calculate days since last signal
+  const sorted = [...(history || [])].sort((a,b) => new Date(b.date)-new Date(a.date));
+  let daysSinceSignal = 0;
+  for (const s of sorted) { if (normaliseTier(s.signal_tier) !== "NONE") break; daysSinceSignal++; }
+
   return (
     <div className="tab-content fade-in">
 
+      {/* ── DAYS SINCE LAST SIGNAL (NONE state only) ── */}
+      {tier === "NONE" && daysSinceSignal > 0 && (
+        <div className="card" style={{ textAlign:"center", padding:"32px 20px", marginBottom:12 }}>
+          <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:72, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
+            {daysSinceSignal}
+          </div>
+          <div style={{ fontSize:14, color:C.text.muted, marginTop:8 }}>days since last signal</div>
+        </div>
+      )}
+
       {/* ── DAILY BRIEFING HERO ── */}
       <div style={{ marginBottom:4 }}>
-        <div style={{ fontSize:12, color:C.text.muted, fontFamily:"'JetBrains Mono',monospace", marginBottom:12 }}>
-          VDGR · {dateStr}
-        </div>
-
         {/* Signal badge — centred, dominant */}
         <div style={{ textAlign:"center", padding:"28px 16px 20px", background:"#141414", borderRadius:14, marginBottom:12, border:`1px solid ${isActionable ? signalColor+"40" : "#252525"}` }}>
           <div style={{ marginBottom:14 }}><SignalBadge signal={tier} /></div>
@@ -1181,10 +1240,18 @@ function PerformanceTab() {
   const [perf, setPerf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [historyData, setHistoryData] = useState([]);
 
   async function loadPerf() {
     setLoading(true); setError(null);
-    try { setPerf(await api("/performance")); }
+    try {
+      const [perfData, history] = await Promise.all([
+        api("/performance"),
+        api("/signal/history?days=365"),
+      ]);
+      setPerf(perfData);
+      setHistoryData(history.history || []);
+    }
     catch { setError("Unable to load performance data."); }
     setLoading(false);
   }
@@ -1258,26 +1325,70 @@ function PerformanceTab() {
       </div>
       {chartData.length > 1 && (
         <div className="card">
-          <SectionLabel>Invested vs Value</SectionLabel>
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={chartData}>
+          <SectionLabel>Portfolio Growth</SectionLabel>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={chartData}>
               <defs>
                 <linearGradient id="valGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={C.green} stopOpacity={0.3} />
                   <stop offset="95%" stopColor={C.green} stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="invGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={C.accent} stopOpacity={0.2} />
-                  <stop offset="95%" stopColor={C.accent} stopOpacity={0} />
-                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#252525" />
-              <XAxis dataKey="date" tick={{ fill:C.text.muted, fontSize:11 }} />
+              <XAxis dataKey="date" tick={{ fill:C.text.muted, fontSize:10 }} />
               <YAxis tick={{ fill:C.text.muted, fontSize:11 }} width={55} tickFormatter={v => `$${Number(v).toFixed(0)}`} />
-              <Tooltip contentStyle={{ background:"#1C1C1C", border:"1px solid #252525", borderRadius:8, fontSize:12 }} formatter={v => [fmt.aud(v)]} />
-              <Area type="stepAfter" dataKey="invested" stroke={C.accent} fill="url(#invGrad)" strokeWidth={2} name="Invested" />
-              <Area type="monotone" dataKey="value" stroke={C.green} fill="url(#valGrad)" strokeWidth={2} name="Value" />
-            </AreaChart>
+              <Tooltip
+                contentStyle={{ background:"#1C1C1C", border:"1px solid #252525", borderRadius:8, fontSize:12 }}
+                formatter={(v, name) => {
+                  if (name === "invested") return [fmt.aud(v), "Total Invested"];
+                  if (name === "value") return [fmt.aud(v), "Portfolio Value"];
+                  return [v, name];
+                }}
+                labelFormatter={(label, payload) => {
+                  if (!payload || !payload[0]) return label;
+                  const data = payload[0].payload;
+                  const profit = data.value - data.invested;
+                  return `${label} · ${profit >= 0 ? "+" : ""}${fmt.aud(profit)} P/L`;
+                }}
+              />
+              {/* Cost basis line */}
+              {summary.totalUnits > 0 && (
+                <ReferenceLine
+                  y={summary.totalInvested / summary.totalUnits}
+                  stroke="rgba(255,255,255,0.4)"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: `Avg Cost $${(summary.totalInvested / summary.totalUnits).toFixed(2)}`,
+                    position: "insideTopRight",
+                    fill: "rgba(255,255,255,0.6)",
+                    fontSize: 10,
+                  }}
+                />
+              )}
+              {/* Portfolio value area */}
+              <Area type="monotone" dataKey="value" stroke={C.green} fill="url(#valGrad)" strokeWidth={2.5} name="value" />
+              {/* Total invested line */}
+              <Line type="stepAfter" dataKey="invested" stroke={C.accent} strokeWidth={2} dot={false} name="invested" />
+              {/* Buy markers */}
+              <Scatter
+                data={(ledger || []).map(e => ({
+                  date: fmt.short(e.date),
+                  value: parseFloat(e.actual_amount),
+                  tier: normaliseTier(e.signal_tier),
+                }))}
+                shape={(props) => {
+                  const { cx, cy, payload } = props;
+                  if (!payload.tier) return null;
+                  const color = C.signal[payload.tier];
+                  return (
+                    <g>
+                      <line x1={cx} y1={cy - 12} x2={cx} y2={cy + 4} stroke={color} strokeWidth={2} />
+                      <circle cx={cx} cy={cy - 12} r={4} fill={color} stroke="#0A0A0A" strokeWidth={1.5} />
+                    </g>
+                  );
+                }}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
@@ -1749,15 +1860,59 @@ function MoreDrawer({ onSelect, onClose }) {
   );
 }
 
+// ─── PERSISTENT HEADER ────────────────────────────────────────────────────────
+function PersistentHeader({ signal }) {
+  const dateStr = new Date().toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
+  const tier = signal ? normaliseTier(signal.signal_tier) : "NONE";
+  const price = signal ? Number(signal.vdgr_price) : null;
+
+  return (
+    <div style={{
+      position:"fixed",
+      top:0,
+      left:"50%",
+      transform:"translateX(-50%)",
+      width:"100%",
+      maxWidth:520,
+      height:56,
+      background:"rgba(10,10,10,0.97)",
+      borderBottom:"1px solid #252525",
+      backdropFilter:"blur(16px)",
+      WebkitBackdropFilter:"blur(16px)",
+      display:"flex",
+      alignItems:"center",
+      justifyContent:"space-between",
+      padding:"0 16px",
+      zIndex:100,
+    }}>
+      <div>
+        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:20, fontWeight:800, color:"#F0F0F0" }}>VDGR</div>
+        <div style={{ fontSize:11, color:C.text.muted }}>{dateStr}</div>
+      </div>
+      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+        <SignalBadge signal={tier} size="sm" />
+        {price && (
+          <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color:C.accent }}>${price.toFixed(2)}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("today");
   const [showMore, setShowMore] = useState(false);
   const [historyData, setHistoryData] = useState([]);
+  const [globalSignal, setGlobalSignal] = useState(null);
 
   useEffect(() => {
     api("/signal/history?days=180")
       .then(d => setHistoryData((d.history || []).map(h => ({ ...h, signal_tier: h.signal_tier === "WATCH" ? "LOW" : (h.signal_tier || "NONE") }))))
+      .catch(() => {});
+    // Fetch global signal for header
+    api("/signal/today")
+      .then(d => setGlobalSignal(d.signal))
       .catch(() => {});
   }, []);
 
@@ -1788,6 +1943,7 @@ export default function App() {
   return (
     <>
       <style>{globalStyle}</style>
+      <PersistentHeader signal={globalSignal} />
       <div style={{ background:"#0A0A0A", minHeight:"100vh", color:"#F0F0F0" }}>
         {tab==="today"    && <TodayTab />}
         {tab==="charts"   && <ChartsTab />}
