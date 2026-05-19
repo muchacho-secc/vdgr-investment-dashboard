@@ -123,12 +123,12 @@ function SkeletonCard({ height = 80 }) {
 }
 
 // ─── Drawdown Bands Component ─────────────────────────────────────────────────
-function DrawdownBands({ price, high52w }) {
+function DrawdownBands({ price, high52w, noCard }) {
   if (!price || !high52w) return null;
   const currentDd = ((price - high52w) / high52w) * 100;
   const bands = [5, 10, 15, 20];
-  return (
-    <div className="card">
+  const content = (
+    <>
       <SectionLabel>Price vs 52-Week High</SectionLabel>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:12 }}>
         <div>
@@ -161,12 +161,13 @@ function DrawdownBands({ price, high52w }) {
           );
         })}
       </div>
-    </div>
+    </>
   );
+  return noCard ? content : <div className="card">{content}</div>;
 }
 
 // ─── Next Tier Indicator ──────────────────────────────────────────────────────
-function NextTierIndicator({ rsi, vix }) {
+function NextTierIndicator({ rsi, vix, noCard }) {
   if (!rsi || !vix) return null;
   const tiers = [
     { name:"LOW",     rsiBelow:50, vixAbove:18 },
@@ -183,13 +184,40 @@ function NextTierIndicator({ rsi, vix }) {
   const rsiNeeded = rsi - nextTier.rsiBelow;
   const vixNeeded = nextTier.vixAbove - vix;
   const color = C.signal[nextTier.name];
-  return (
-    <div className="card" style={{ borderColor:`${color}30` }}>
+
+  // Calculate probability score
+  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+  const rsiProgress = clamp((rsi - nextTier.rsiBelow) / 15 * 100, 0, 100);
+  const vixProgress = clamp((nextTier.vixAbove - vix) / 10 * 100, 0, 100);
+  const rsiScore = rsiNeeded > 0 ? 100 - rsiProgress : 100;
+  const vixScore = vixNeeded > 0 ? 100 - vixProgress : 100;
+  const combinedScore = (rsiScore + vixScore) / 2;
+
+  const content = (
+    <>
       <SectionLabel>Distance to next tier</SectionLabel>
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
         <SignalBadge signal={nextTier.name} size="sm" />
         <span style={{ fontSize:13, color:C.text.secondary }}>requires both conditions</span>
       </div>
+
+      {/* Probability meter */}
+      <div style={{ marginBottom:12 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+          <span style={{ fontSize:12, color:C.text.muted }}>Signal Probability</span>
+          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, fontWeight:600, color }}>{combinedScore.toFixed(0)}%</span>
+        </div>
+        <div style={{ width:"100%", height:8, background:"#252525", borderRadius:999, overflow:"hidden" }}>
+          <div style={{
+            width:`${combinedScore}%`,
+            height:"100%",
+            background:`linear-gradient(to right, ${C.signal.LOW}, ${color})`,
+            borderRadius:999,
+            transition:"width 0.4s ease"
+          }} />
+        </div>
+      </div>
+
       <div style={{ display:"flex", gap:8 }}>
         <div style={{ flex:1, background:"#141414", borderRadius:8, padding:"10px 12px" }}>
           <div style={{ fontSize:11, color:C.text.muted, marginBottom:4 }}>RSI needs to drop</div>
@@ -206,8 +234,9 @@ function NextTierIndicator({ rsi, vix }) {
           <div style={{ fontSize:11, color:C.text.muted, marginTop:2 }}>above {nextTier.vixAbove}</div>
         </div>
       </div>
-    </div>
+    </>
   );
+  return noCard ? content : <div className="card" style={{ borderColor:`${color}30` }}>{content}</div>;
 }
 
 // ─── Signal Streak ────────────────────────────────────────────────────────────
@@ -335,6 +364,9 @@ function TodayTab() {
   const [input, setInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatRef = useRef(null);
+  const [sparklineData, setSparklineData] = useState([]);
+  const [sparklineLoading, setSparklineLoading] = useState(true);
+  const [marketTab, setMarketTab] = useState("snapshot");
 
   async function loadData() {
     setLoading(true); setError(null);
@@ -351,7 +383,16 @@ function TodayTab() {
     setLoading(false);
   }
 
-  useEffect(() => { loadData(); }, []);
+  async function loadSparkline() {
+    setSparklineLoading(true);
+    try {
+      const data = await api("/signal/chart?range=1mo");
+      setSparklineData((data.chartData || []).map(d => ({ date: d.date, price: d.price })));
+    } catch { setSparklineData([]); }
+    setSparklineLoading(false);
+  }
+
+  useEffect(() => { loadData(); loadSparkline(); }, []);
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [messages]);
 
   async function sendChat() {
@@ -380,6 +421,23 @@ function TodayTab() {
     let days = 0;
     for (const s of sorted) { if (normaliseTier(s.signal_tier) !== "NONE") break; days++; }
     return days > 0 ? `Markets quiet · ${days} days since last signal` : "Markets quiet";
+  }
+
+  // Calculate next update time (8am AEDT weekday)
+  function getNextUpdate(signalDate) {
+    if (!signalDate) return null;
+    const now = new Date();
+    const signalDt = new Date(signalDate + "T00:00:00+10:00");
+    let next = new Date(signalDt);
+    next.setDate(next.getDate() + 1);
+    // Skip to next weekday
+    while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const nextDay = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+    const diffDays = Math.round((nextDay - today) / 86400000);
+    if (diffDays === 0) return "Today 8am AEDT";
+    if (diffDays === 1) return "Tomorrow 8am AEDT";
+    return next.toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" }) + " 8am AEDT";
   }
 
   const dateStr = new Date().toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
@@ -428,7 +486,31 @@ function TodayTab() {
           <div style={{ marginTop:8, fontSize:11, color:C.text.muted }}>
             Latest data: {signal ? fmt.date(signal.date) : "—"}
           </div>
+          {signal?.date && (
+            <div style={{ fontSize:11, color:C.text.muted, marginTop:4 }}>
+              Next update: {getNextUpdate(signal.date)}
+            </div>
+          )}
+          {/* 30-day sparkline */}
+          <div style={{ marginTop:12 }}>
+            {sparklineLoading ? (
+              <div style={{ height:60, background:"#0A0A0A", borderRadius:6 }} className="skeleton" />
+            ) : sparklineData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={60}>
+                <LineChart data={sparklineData}>
+                  <Line type="monotone" dataKey="price" stroke={C.accent} strokeWidth={2} dot={false} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : null}
+          </div>
         </div>
+
+        {/* Analyst summary excerpt */}
+        {signal?.analyst_summary && (
+          <div style={{ fontSize:13, color:C.text.secondary, lineHeight:1.6, marginBottom:12, padding:"0 4px" }}>
+            {signal.analyst_summary.split('\n').slice(0, 3).join(' ').slice(0, 200)}…
+          </div>
+        )}
 
         {/* P&L strip — always visible */}
         {perf ? (
@@ -471,11 +553,87 @@ function TodayTab() {
         </div>
       )}
 
-      {/* ── ANALYST COMMENTARY ── */}
-      {signal?.analyst_summary && (
+      {/* ── MARKET PULSE (NONE state only) ── */}
+      {tier === "NONE" && signal && (
         <div className="card">
-          <SectionLabel>Analyst Commentary</SectionLabel>
-          <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.6 }}>{signal.analyst_summary}</div>
+          <SectionLabel>Market Pulse</SectionLabel>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {/* RSI proximity to WATCH (50) */}
+            {(() => {
+              const threshold = 50;
+              const distance = rsi - threshold;
+              const progress = Math.max(0, Math.min(100, (80 - rsi) / (80 - threshold) * 100));
+              return (
+                <div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ fontSize:12, color:C.text.muted }}>RSI <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{rsi.toFixed(1)}</span></span>
+                    <span style={{ fontSize:11, color:C.text.muted }}>{distance.toFixed(1)} from WATCH</span>
+                  </div>
+                  <div style={{ height:4, background:"#252525", borderRadius:2, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${progress}%`, background:C.signal.LOW, borderRadius:2, transition:"width .4s ease" }} />
+                  </div>
+                </div>
+              );
+            })()}
+            {/* VIX proximity to WATCH (18) */}
+            {(() => {
+              const threshold = 18;
+              const distance = threshold - vix;
+              const progress = Math.max(0, Math.min(100, (vix - 10) / (threshold - 10) * 100));
+              return (
+                <div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ fontSize:12, color:C.text.muted }}>VIX <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{vix.toFixed(1)}</span></span>
+                    <span style={{ fontSize:11, color:C.text.muted }}>{distance.toFixed(1)} from WATCH</span>
+                  </div>
+                  <div style={{ height:4, background:"#252525", borderRadius:2, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${progress}%`, background:C.signal.LOW, borderRadius:2, transition:"width .4s ease" }} />
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Drawdown proximity to WATCH (-5%) */}
+            {(() => {
+              const threshold = -5;
+              const distance = drawdown - threshold;
+              const progress = Math.max(0, Math.min(100, (0 - drawdown) / (0 - threshold) * 100));
+              return (
+                <div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ fontSize:12, color:C.text.muted }}>Drawdown <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{drawdown.toFixed(1)}%</span></span>
+                    <span style={{ fontSize:11, color:C.text.muted }}>{Math.abs(distance).toFixed(1)} from WATCH</span>
+                  </div>
+                  <div style={{ height:4, background:"#252525", borderRadius:2, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${progress}%`, background:C.signal.LOW, borderRadius:2, transition:"width .4s ease" }} />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── TABBED MARKET INSIGHTS ── */}
+      {tier !== "NONE" && signal && (
+        <div className="card">
+          <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+            <button className={`pill-btn ${marketTab==="snapshot"?"active":""}`} onClick={() => setMarketTab("snapshot")}>Market Snapshot</button>
+            <button className={`pill-btn ${marketTab==="analysis"?"active":""}`} onClick={() => setMarketTab("analysis")}>Analysis</button>
+          </div>
+
+          {marketTab === "snapshot" ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {/* NextTierIndicator content */}
+              <NextTierIndicator rsi={rsi} vix={vix} noCard />
+              {/* DrawdownBands content */}
+              <DrawdownBands price={price} high52w={high52w} noCard />
+            </div>
+          ) : (
+            <div>
+              <SectionLabel>Analyst Commentary</SectionLabel>
+              <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.6 }}>{signal.analyst_summary || "No commentary available."}</div>
+            </div>
+          )}
         </div>
       )}
 
