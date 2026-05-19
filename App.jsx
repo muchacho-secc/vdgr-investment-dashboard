@@ -581,12 +581,26 @@ function ChartsTab() {
               </LineChart>
             </ResponsiveContainer>
             <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
-              {["LOW","MEDIUM","HIGH","EXTREME"].map(s => (
-                <div key={s} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <div style={{ width:10, height:3, background:C.signal[s], borderRadius:1 }} />
-                  <span style={{ fontSize:11, color:C.text.muted }}>{s}</span>
-                </div>
-              ))}
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:16, height:2, background:C.green, borderRadius:1 }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>RSI</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.LOW }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>50 Watch</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.MEDIUM }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>45 Medium</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.HIGH }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>35 High</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.EXTREME }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>30 Extreme</span>
+              </div>
             </div>
           </div>
           <div className="card">
@@ -605,12 +619,26 @@ function ChartsTab() {
               </LineChart>
             </ResponsiveContainer>
             <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
-              {["LOW","MEDIUM","HIGH","EXTREME"].map(s => (
-                <div key={s} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <div style={{ width:10, height:3, background:C.signal[s], borderRadius:1 }} />
-                  <span style={{ fontSize:11, color:C.text.muted }}>{s}</span>
-                </div>
-              ))}
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:16, height:2, background:"#A78BFA", borderRadius:1 }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>VIX</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.LOW }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>18 Watch</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.MEDIUM }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>20 Medium</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.HIGH }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>25 High</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.EXTREME }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>30 Extreme</span>
+              </div>
             </div>
           </div>
           <div className="card">
@@ -629,12 +657,26 @@ function ChartsTab() {
               </LineChart>
             </ResponsiveContainer>
             <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
-              {["LOW","MEDIUM","HIGH","EXTREME"].map(s => (
-                <div key={s} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <div style={{ width:10, height:3, background:C.signal[s], borderRadius:1 }} />
-                  <span style={{ fontSize:11, color:C.text.muted }}>{s}</span>
-                </div>
-              ))}
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:16, height:2, background:C.signal.HIGH, borderRadius:1 }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>Drawdown</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.LOW }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>-5%</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.MEDIUM }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>-10%</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.HIGH }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>-15%</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:C.signal.EXTREME }} />
+                <span style={{ fontSize:11, color:C.text.muted }}>-20%</span>
+              </div>
             </div>
           </div>
         </>
@@ -1220,6 +1262,12 @@ function SignalCalendar({ history }) {
   const DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const sigColors = { LOW:"#EAB308", MEDIUM:"#F97316", HIGH:"#EF4444", EXTREME:"#8B5CF6" };
 
+  // Get today's date for highlighting
+  const today = new Date();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth() + 1;
+  const todayDay = today.getDate();
+
   if (!months.length) return <div style={{ textAlign:"center", padding:"40px 20px", color:"#4B5563", fontSize:14 }}>No signal history yet.</div>;
 
   return (
@@ -1267,18 +1315,22 @@ function SignalCalendar({ history }) {
                     const rawTier = byMonth[monthKey]?.[dayStr];
                     const tier = rawTier === "WATCH" ? "LOW" : rawTier;
                     const color = sigColors[tier] || null;
+
+                    // Check if this is today
+                    const isToday = (day === todayDay && month === todayMonth && year === todayYear);
+
                     return (
                       <div key={di} style={{
                         aspectRatio:"1",
                         borderRadius:4,
                         background: color ? color+"25" : "#141414",
-                        border:"1px solid "+(color ? color+"50" : "#1E1E1E"),
+                        border: isToday ? "2px solid #F0F0F0" : "1px solid "+(color ? color+"50" : "#1E1E1E"),
                         display:"flex",
                         alignItems:"center",
                         justifyContent:"center",
                         fontSize:10,
-                        color: color || "#4B5563",
-                        fontWeight: color ? 700 : 400,
+                        color: isToday ? "#F0F0F0" : (color || "#4B5563"),
+                        fontWeight: isToday ? 700 : (color ? 700 : 400),
                         fontFamily:"'JetBrains Mono',monospace",
                       }}>
                         {day}
@@ -1312,7 +1364,7 @@ function SignalCalendar({ history }) {
 function HistoryList({ history }) {
   const [filter, setFilter] = useState("signals");
   const sigColors = { LOW:"#EAB308", MEDIUM:"#F97316", HIGH:"#EF4444", EXTREME:"#8B5CF6" };
-  const filtered = filter === "signals" ? (history || []).filter(d => d.signal_tier !== "NONE") : (history || []);
+  const filtered = (filter === "signals" ? (history || []).filter(d => d.signal_tier !== "NONE") : (history || [])).sort((a, b) => new Date(b.date) - new Date(a.date));
   return (
     <>
       <div style={{ display:"flex", gap:6, marginBottom:12 }}>
