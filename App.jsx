@@ -275,10 +275,8 @@ function SignalStreak({ history }) {
   );
 }
 
-// ─── PROXIMITY BARS ───────────────────────────────────────────────────────────
-// Shown when RSI or VIX is within 30% of triggering the next tier threshold.
-// RSI needs to DROP to trigger (distance = current - threshold).
-// VIX needs to RISE to trigger (distance = threshold - current).
+// ─── NEXT SIGNAL ──────────────────────────────────────────────────────────────
+// Simplified display showing distance to next signal tier
 function ProximityBars({ rsi, vix }) {
   if (!rsi || !vix) return null;
 
@@ -298,57 +296,37 @@ function ProximityBars({ rsi, vix }) {
   if (!nextTier) return null; // all tiers triggered = EXTREME already active
 
   const color = C.signal[nextTier.name];
-
-  // RSI proximity: how far from threshold, as % of a 30-point reference range
-  // (RSI 80 = totally calm baseline, threshold = nextTier.rsiBelow)
-  const rsiRange = 80 - nextTier.rsiBelow;
   const rsiDist = rsi - nextTier.rsiBelow; // positive = not triggered yet
-  const rsiPct = Math.max(0, Math.min(1, 1 - rsiDist / rsiRange)); // 0=far, 1=triggered
-
-  // VIX proximity: how far from threshold, reference range = threshold - 10
-  const vixRange = nextTier.vixAbove - 10;
   const vixDist = nextTier.vixAbove - vix; // positive = not triggered yet
-  const vixPct = Math.max(0, Math.min(1, 1 - vixDist / vixRange)); // 0=far, 1=triggered
-
-  // Only show if either is within 30% of triggering
-  const rsiClose = rsiPct >= 0.70;
-  const vixClose = vixPct >= 0.70;
-  if (!rsiClose && !vixClose) return null;
 
   return (
     <div className="card" style={{ borderColor:`${color}30`, marginBottom:12 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <SectionLabel>Approaching signal</SectionLabel>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+        <SectionLabel>Next Signal</SectionLabel>
         <div style={{ display:"inline-flex", alignItems:"center", background:`${color}18`, border:`1.5px solid ${color}`, borderRadius:999, padding:"2px 10px" }}>
           <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:12, fontWeight:800, color, letterSpacing:1.5 }}>{nextTier.name}</span>
         </div>
       </div>
 
-      {rsiClose && (
-        <div style={{ marginBottom:10 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-            <span style={{ fontSize:12, color:C.text.muted }}>RSI <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{rsi.toFixed(1)}</span></span>
-            <span style={{ fontSize:12, color:C.text.muted }}>needs <span style={{ fontFamily:"'JetBrains Mono',monospace", color }}>&lt;{nextTier.rsiBelow}</span></span>
-          </div>
-          <div style={{ height:5, background:"#252525", borderRadius:3, overflow:"hidden" }}>
-            <div style={{ height:"100%", width:`${rsiPct*100}%`, background:color, borderRadius:3, transition:"width .4s ease" }} />
-          </div>
-          <div style={{ fontSize:11, color:C.text.muted, marginTop:3 }}>↓ {rsiDist.toFixed(1)} points to go</div>
+      {/* RSI row */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+        <span style={{ fontSize:13, color:C.text.muted }}>RSI</span>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color:C.text.secondary }}>{rsi.toFixed(1)}</span>
+          <span style={{ fontSize:13, color:C.text.muted }}>↓</span>
+          <span style={{ fontSize:13, color:C.text.muted }}>{rsiDist.toFixed(1)} points to go</span>
         </div>
-      )}
+      </div>
 
-      {vixClose && (
-        <div>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-            <span style={{ fontSize:12, color:C.text.muted }}>VIX <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{vix.toFixed(1)}</span></span>
-            <span style={{ fontSize:12, color:C.text.muted }}>needs <span style={{ fontFamily:"'JetBrains Mono',monospace", color }}>&gt;{nextTier.vixAbove}</span></span>
-          </div>
-          <div style={{ height:5, background:"#252525", borderRadius:3, overflow:"hidden" }}>
-            <div style={{ height:"100%", width:`${vixPct*100}%`, background:color, borderRadius:3, transition:"width .4s ease" }} />
-          </div>
-          <div style={{ fontSize:11, color:C.text.muted, marginTop:3 }}>↑ {vixDist.toFixed(1)} points to go</div>
+      {/* VIX row */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span style={{ fontSize:13, color:C.text.muted }}>VIX</span>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color:C.text.secondary }}>{vix.toFixed(1)}</span>
+          <span style={{ fontSize:13, color:C.text.muted }}>↑</span>
+          <span style={{ fontSize:13, color:C.text.muted }}>{vixDist.toFixed(1)} points to go</span>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -427,15 +405,25 @@ function TodayTab() {
   function getNextUpdate(signalDate) {
     if (!signalDate) return null;
     const now = new Date();
-    const signalDt = new Date(signalDate + "T00:00:00+10:00");
-    let next = new Date(signalDt);
+    // Convert current time to AEDT (UTC+10)
+    const aedtNow = new Date(now.toLocaleString("en-US", { timeZone: "Australia/Sydney" }));
+    const currentHour = aedtNow.getHours();
+
+    // Start from tomorrow (since update runs at 8am and by the time users see it, it's already happened)
+    let next = new Date(aedtNow);
     next.setDate(next.getDate() + 1);
-    // Skip to next weekday
-    while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    next.setHours(8, 0, 0, 0);
+
+    // Skip weekends
+    while (next.getDay() === 0 || next.getDay() === 6) {
+      next.setDate(next.getDate() + 1);
+    }
+
+    // Calculate days difference
+    const today = new Date(aedtNow.getFullYear(), aedtNow.getMonth(), aedtNow.getDate());
     const nextDay = new Date(next.getFullYear(), next.getMonth(), next.getDate());
     const diffDays = Math.round((nextDay - today) / 86400000);
-    if (diffDays === 0) return "Today 8am AEDT";
+
     if (diffDays === 1) return "Tomorrow 8am AEDT";
     return next.toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" }) + " 8am AEDT";
   }
@@ -508,7 +496,7 @@ function TodayTab() {
         {/* Analyst summary excerpt */}
         {signal?.analyst_summary && (
           <div style={{ fontSize:13, color:C.text.secondary, lineHeight:1.6, marginBottom:12, padding:"0 4px" }}>
-            {signal.analyst_summary.split('\n').slice(0, 3).join(' ').slice(0, 200)}…
+            {signal.analyst_summary}
           </div>
         )}
 
@@ -542,76 +530,17 @@ function TodayTab() {
           {[
             { label:"RSI", value: rsi?.toFixed(1), highlight: rsi < 35 ? C.red : rsi < 45 ? C.signal.MEDIUM : rsi < 50 ? C.signal.LOW : null },
             { label:"VIX", value: vix?.toFixed(1), highlight: vix > 25 ? C.red : vix > 20 ? C.signal.MEDIUM : vix > 18 ? C.signal.LOW : null },
-            { label:"Price", value: `$${price?.toFixed(2)}`, color:C.accent },
+            { label:"PRICE", value: `$${price?.toFixed(2)}`, color:C.text.primary, isPrice: true },
             { label:"Drawdown", value: `${drawdown?.toFixed(1)}%`, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary },
-          ].map(({ label, value, color, highlight }) => (
-            <div key={label} style={{ background: highlight ? `${highlight}12` : "#141414", border:`1px solid ${highlight ? highlight+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
-              <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>{label}</div>
-              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:16, color: color || C.text.primary, fontWeight:500 }}>{value}</div>
+          ].map(({ label, value, color, highlight, isPrice }) => (
+            <div key={label} style={{ background: highlight ? `${highlight}12` : "#141414", border: isPrice ? "1px solid #3B82F6" : `1px solid ${highlight ? highlight+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
+              <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight: isPrice ? 700 : 400 }}>{label}</div>
+              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize: isPrice ? 20 : 16, color: color || C.text.primary, fontWeight:500 }}>{value}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── MARKET PULSE (NONE state only) ── */}
-      {tier === "NONE" && signal && (
-        <div className="card">
-          <SectionLabel>Market Pulse</SectionLabel>
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {/* RSI proximity to WATCH (50) */}
-            {(() => {
-              const threshold = 50;
-              const distance = rsi - threshold;
-              const progress = Math.max(0, Math.min(100, (80 - rsi) / (80 - threshold) * 100));
-              return (
-                <div>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                    <span style={{ fontSize:12, color:C.text.muted }}>RSI <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{rsi.toFixed(1)}</span></span>
-                    <span style={{ fontSize:11, color:C.text.muted }}>{distance.toFixed(1)} from WATCH</span>
-                  </div>
-                  <div style={{ height:4, background:"#252525", borderRadius:2, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${progress}%`, background:C.signal.LOW, borderRadius:2, transition:"width .4s ease" }} />
-                  </div>
-                </div>
-              );
-            })()}
-            {/* VIX proximity to WATCH (18) */}
-            {(() => {
-              const threshold = 18;
-              const distance = threshold - vix;
-              const progress = Math.max(0, Math.min(100, (vix - 10) / (threshold - 10) * 100));
-              return (
-                <div>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                    <span style={{ fontSize:12, color:C.text.muted }}>VIX <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{vix.toFixed(1)}</span></span>
-                    <span style={{ fontSize:11, color:C.text.muted }}>{distance.toFixed(1)} from WATCH</span>
-                  </div>
-                  <div style={{ height:4, background:"#252525", borderRadius:2, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${progress}%`, background:C.signal.LOW, borderRadius:2, transition:"width .4s ease" }} />
-                  </div>
-                </div>
-              );
-            })()}
-            {/* Drawdown proximity to WATCH (-5%) */}
-            {(() => {
-              const threshold = -5;
-              const distance = drawdown - threshold;
-              const progress = Math.max(0, Math.min(100, (0 - drawdown) / (0 - threshold) * 100));
-              return (
-                <div>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                    <span style={{ fontSize:12, color:C.text.muted }}>Drawdown <span style={{ fontFamily:"'JetBrains Mono',monospace", color:C.text.secondary }}>{drawdown.toFixed(1)}%</span></span>
-                    <span style={{ fontSize:11, color:C.text.muted }}>{Math.abs(distance).toFixed(1)} from WATCH</span>
-                  </div>
-                  <div style={{ height:4, background:"#252525", borderRadius:2, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${progress}%`, background:C.signal.LOW, borderRadius:2, transition:"width .4s ease" }} />
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
 
       {/* ── TABBED MARKET INSIGHTS ── */}
       {tier !== "NONE" && signal && (
@@ -1790,8 +1719,8 @@ const icons = {
 // ─── MORE DRAWER ──────────────────────────────────────────────────────────────
 function MoreDrawer({ onSelect, onClose }) {
   const items = [
-    { id:"perf",     label:"Performance",     icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>, desc:"Portfolio P&L and return tracking" },
-    { id:"backtest", label:"Backtest",         icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, desc:"Simulate signal-based investing" },
+    { id:"ledger",   label:"Ledger",          icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, desc:"Log your investment entries" },
+    { id:"backtest", label:"Backtest",        icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, desc:"Simulate signal-based investing" },
     { id:"settings", label:"Signal Settings", icon:<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>, desc:"Configure thresholds and amounts" },
   ];
   return (
@@ -1846,14 +1775,14 @@ export default function App() {
   }
 
   const tabs = [
-    { id:"today",   label:"Today",   icon:icons.today },
-    { id:"charts",  label:"Charts",  icon:icons.charts },
-    { id:"history", label:"History", icon:icons.history },
-    { id:"ledger",  label:"Ledger",  icon:icons.ledger },
-    { id:"more",    label:"More",    icon:icons.more },
+    { id:"today",       label:"Today",       icon:icons.today },
+    { id:"charts",      label:"Charts",      icon:icons.charts },
+    { id:"history",     label:"History",     icon:icons.history },
+    { id:"perf",        label:"Performance", icon:icons.ledger },
+    { id:"more",        label:"More",        icon:icons.more },
   ];
 
-  const morePages = ["perf","backtest","settings"];
+  const morePages = ["ledger","backtest","settings"];
   const activePrimary = morePages.includes(tab) ? "more" : tab;
 
   return (
