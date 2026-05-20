@@ -1413,7 +1413,7 @@ function SignalCalendar({ history }) {
 
   console.log("SignalCalendar byMonth keys:", Object.keys(byMonth).length, "months");
 
-  const months = Object.keys(byMonth).sort().reverse().slice(0, 12);
+  const months = Object.keys(byMonth).sort().reverse().slice(0, 24);
   const DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const sigColors = { LOW:"#EAB308", MEDIUM:"#F97316", HIGH:"#EF4444", EXTREME:"#8B5CF6" };
 
@@ -1865,8 +1865,9 @@ export default function App() {
   const [globalSignal, setGlobalSignal] = useState(null);
 
   useEffect(() => {
-    api("/signal/history?days=365")
+    api("/signal/history?days=730")
       .then(d => {
+        console.log('History data:', d.history?.length, d.history?.[0], d.history?.[d.history?.length-1]);
         const history = (d.history || []).map(h => ({ ...h, signal_tier: h.signal_tier === "WATCH" ? "LOW" : (h.signal_tier || "NONE") }));
         console.log("History data loaded:", history.length, "days");
         setHistoryData(history);

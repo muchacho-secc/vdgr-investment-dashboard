@@ -153,8 +153,11 @@ async function getTodaySignal(env) {
 }
 
 async function getSignalHistory(env, days = 90) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
   return supabaseGet(env, 'signals',
-    `?user_id=eq.${env.USER_ID}&order=date.desc&limit=${days}&select=date,signal_tier,rsi,vix,vdgr_price,drawdown_pct,recommended_amount,analyst_summary`
+    `?user_id=eq.${env.USER_ID}&date=gte.${cutoffStr}&order=date.desc&limit=500&select=date,signal_tier,rsi,vix,vdgr_price,drawdown_pct,recommended_amount,analyst_summary`
   );
 }
 
@@ -169,7 +172,7 @@ export async function handleSignalRoutes(request, env, url) {
   // GET /signal/history?days=90
   if (url.pathname === '/signal/history' && request.method === 'GET') {
     const days = parseInt(url.searchParams.get('days') || '90', 10);
-    const history = await getSignalHistory(env, Math.min(days, 365));
+    const history = await getSignalHistory(env, Math.min(days, 730));
     return json({ history });
   }
 
