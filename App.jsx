@@ -166,77 +166,203 @@ function DrawdownBands({ price, high52w, noCard }) {
   return noCard ? content : <div className="card">{content}</div>;
 }
 
-// ─── Next Tier Indicator ──────────────────────────────────────────────────────
-function NextTierIndicator({ rsi, vix, noCard }) {
+// ─── SIGNAL JOURNEY ───────────────────────────────────────────────────────────
+function SignalJourney({ rsi, vix }) {
   if (!rsi || !vix) return null;
-  const tiers = [
-    { name:"LOW",     rsiBelow:50, vixAbove:18 },
-    { name:"MEDIUM",  rsiBelow:45, vixAbove:20 },
-    { name:"HIGH",    rsiBelow:35, vixAbove:25 },
-    { name:"EXTREME", rsiBelow:30, vixAbove:30 },
+
+  const journey = [
+    { id:"NONE",    name:"NONE",    color:C.signal.NONE,    threshold:"—" },
+    { id:"WATCH",   name:"WATCH",   color:C.signal.LOW,     threshold:"RSI<50\nVIX>18" },
+    { id:"MEDIUM",  name:"MEDIUM",  color:C.signal.MEDIUM,  threshold:"RSI<45\nVIX>20" },
+    { id:"HIGH",    name:"HIGH",    color:C.signal.HIGH,    threshold:"RSI<35\nVIX>25" },
+    { id:"EXTREME", name:"EXTREME", color:C.signal.EXTREME, threshold:"RSI<30\nDD<-10%" },
   ];
-  let currentIdx = -1;
-  for (let i = tiers.length - 1; i >= 0; i--) {
-    if (rsi < tiers[i].rsiBelow && vix > tiers[i].vixAbove) { currentIdx = i; break; }
+
+  const thresholds = {
+    WATCH:   { rsi:50, vix:18 },
+    MEDIUM:  { rsi:45, vix:20 },
+    HIGH:    { rsi:35, vix:25 },
+    EXTREME: { rsi:30, vix:30 },
+  };
+
+  // Determine current position
+  let currentLevel = "NONE";
+  if (rsi < 50 && vix > 18) currentLevel = "WATCH";
+  if (rsi < 45 && vix > 20) currentLevel = "MEDIUM";
+  if (rsi < 35 && vix > 25) currentLevel = "HIGH";
+  if (rsi < 30 && vix > 30) currentLevel = "EXTREME";
+  const currentIdx = journey.findIndex(j => j.id === currentLevel);
+
+  // Find next threshold for distance calculations
+  const nextLevels = ["WATCH", "MEDIUM", "HIGH", "EXTREME"];
+  let nextThreshold = null;
+  for (const level of nextLevels) {
+    const t = thresholds[level];
+    if (rsi >= t.rsi || vix <= t.vix) {
+      nextThreshold = { level, ...t };
+      break;
+    }
   }
-  const nextTier = tiers[currentIdx + 1];
-  if (!nextTier) return null;
-  const rsiNeeded = rsi - nextTier.rsiBelow;
-  const vixNeeded = nextTier.vixAbove - vix;
-  const color = C.signal[nextTier.name];
 
-  // Calculate probability score
-  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
-  const rsiProgress = clamp((rsi - nextTier.rsiBelow) / 15 * 100, 0, 100);
-  const vixProgress = clamp((nextTier.vixAbove - vix) / 10 * 100, 0, 100);
-  const rsiScore = rsiNeeded > 0 ? 100 - rsiProgress : 100;
-  const vixScore = vixNeeded > 0 ? 100 - vixProgress : 100;
-  const combinedScore = (rsiScore + vixScore) / 2;
+  // RSI indicator row
+  const rsiThresholdPositions = [50, 45, 35, 30];
+  const rsiMin = 25, rsiMax = 70;
+  const rsiPercent = ((rsiMax - rsi) / (rsiMax - rsiMin)) * 100;
+  let rsiColor = C.text.muted;
+  if (rsi < 30) rsiColor = C.signal.EXTREME;
+  else if (rsi < 35) rsiColor = C.signal.HIGH;
+  else if (rsi < 45) rsiColor = C.signal.MEDIUM;
+  else if (rsi < 55) rsiColor = C.signal.LOW;
 
-  const content = (
-    <>
-      <SectionLabel>Distance to next tier</SectionLabel>
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-        <SignalBadge signal={nextTier.name} size="sm" />
-        <span style={{ fontSize:13, color:C.text.secondary }}>requires both conditions</span>
+  const rsiDist = nextThreshold && rsi >= nextThreshold.rsi ? (rsi - nextThreshold.rsi).toFixed(1) : null;
+  const rsiDistText = rsiDist ? `${rsiDist} to ${nextThreshold.level}` : "All met";
+  const rsiDistColor = nextThreshold ? C.signal[nextThreshold.level] : C.green;
+
+  // VIX indicator row
+  const vixThresholdPositions = [18, 20, 25, 30];
+  const vixMin = 10, vixMax = 40;
+  const vixPercent = ((vix - vixMin) / (vixMax - vixMin)) * 100;
+  let vixColor = C.text.muted;
+  if (vix > 30) vixColor = C.signal.EXTREME;
+  else if (vix > 25) vixColor = C.signal.HIGH;
+  else if (vix > 20) vixColor = C.signal.MEDIUM;
+  else if (vix > 18) vixColor = C.signal.LOW;
+
+  const vixDist = nextThreshold && vix <= nextThreshold.vix ? (nextThreshold.vix - vix).toFixed(1) : null;
+  const vixDistText = vixDist ? `${vixDist} to ${nextThreshold.level}` : "All met";
+  const vixDistColor = nextThreshold ? C.signal[nextThreshold.level] : C.green;
+
+  return (
+    <div className="card" style={{ marginBottom:12 }}>
+      <SectionLabel>Signal Journey</SectionLabel>
+
+      {/* Journey bar */}
+      <div style={{ marginBottom:20, marginTop:16 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", position:"relative", marginBottom:16 }}>
+          {/* Connecting lines */}
+          {journey.slice(0, -1).map((step, i) => {
+            const isActive = i < currentIdx;
+            const lineColor = isActive ? journey[currentIdx].color : "#252525";
+            return (
+              <div key={`line-${i}`} style={{
+                position:"absolute",
+                left:`${(i / (journey.length - 1)) * 100 + 10}%`,
+                width:`${100 / (journey.length - 1) - 20}%`,
+                height:2,
+                background:lineColor,
+                top:13,
+                transition:"background 0.4s ease"
+              }} />
+            );
+          })}
+
+          {/* Circles */}
+          {journey.map((step, i) => {
+            const isActive = i <= currentIdx;
+            const isCurrent = i === currentIdx;
+            return (
+              <div key={step.id} style={{ position:"relative", zIndex:2, flex:1, display:"flex", flexDirection:"column", alignItems:"center" }}>
+                <div style={{
+                  width:28,
+                  height:28,
+                  borderRadius:"50%",
+                  border:`2px solid ${step.color}`,
+                  background: isActive ? step.color : "transparent",
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  marginBottom:6,
+                  position:"relative",
+                  transition:"all 0.4s ease"
+                }}>
+                  {isCurrent && (
+                    <div style={{
+                      width:8,
+                      height:8,
+                      borderRadius:"50%",
+                      background:"#F0F0F0",
+                      animation:"pulse 2s ease-in-out infinite"
+                    }} />
+                  )}
+                </div>
+                <div style={{ fontSize:9, color:step.color, fontWeight:700, marginBottom:3, textAlign:"center" }}>{step.name}</div>
+                <div style={{ fontSize:9, color:C.text.muted, textAlign:"center", whiteSpace:"pre-line", lineHeight:1.2 }}>{step.threshold}</div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Probability meter */}
-      <div style={{ marginBottom:12 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-          <span style={{ fontSize:12, color:C.text.muted }}>Signal Probability</span>
-          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, fontWeight:600, color }}>{combinedScore.toFixed(0)}%</span>
-        </div>
-        <div style={{ width:"100%", height:8, background:"#252525", borderRadius:999, overflow:"hidden" }}>
-          <div style={{
-            width:`${combinedScore}%`,
-            height:"100%",
-            background:`linear-gradient(to right, ${C.signal.LOW}, ${color})`,
-            borderRadius:999,
-            transition:"width 0.4s ease"
-          }} />
-        </div>
-      </div>
-
-      <div style={{ display:"flex", gap:8 }}>
-        <div style={{ flex:1, background:"#141414", borderRadius:8, padding:"10px 12px" }}>
-          <div style={{ fontSize:11, color:C.text.muted, marginBottom:4 }}>RSI needs to drop</div>
-          <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:16, color: rsiNeeded > 0 ? C.text.primary : C.green, fontWeight:500 }}>
-            {rsiNeeded > 0 ? `↓ ${rsiNeeded.toFixed(1)}` : "✓ met"}
+      {/* RSI Row */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <div style={{ minWidth:70 }}>
+            <div style={{ fontSize:12, color:C.text.muted }}>RSI</div>
+            <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{rsi.toFixed(1)}</div>
           </div>
-          <div style={{ fontSize:11, color:C.text.muted, marginTop:2 }}>below {nextTier.rsiBelow}</div>
-        </div>
-        <div style={{ flex:1, background:"#141414", borderRadius:8, padding:"10px 12px" }}>
-          <div style={{ fontSize:11, color:C.text.muted, marginBottom:4 }}>VIX needs to rise</div>
-          <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:16, color: vixNeeded > 0 ? C.text.primary : C.green, fontWeight:500 }}>
-            {vixNeeded > 0 ? `↑ ${vixNeeded.toFixed(1)}` : "✓ met"}
+          <div style={{ flex:1, position:"relative" }}>
+            <div style={{ width:"100%", height:6, background:"#252525", borderRadius:999 }}>
+              <div style={{ width:`${Math.min(100, Math.max(0, rsiPercent))}%`, height:"100%", background:rsiColor, borderRadius:999, transition:"all 0.4s ease" }} />
+            </div>
+            {/* Threshold markers */}
+            {rsiThresholdPositions.map(threshold => {
+              const pos = ((rsiMax - threshold) / (rsiMax - rsiMin)) * 100;
+              return (
+                <div key={threshold} style={{
+                  position:"absolute",
+                  left:`${pos}%`,
+                  top:-2,
+                  width:2,
+                  height:10,
+                  background:C.text.muted,
+                  opacity:0.5
+                }} />
+              );
+            })}
           </div>
-          <div style={{ fontSize:11, color:C.text.muted, marginTop:2 }}>above {nextTier.vixAbove}</div>
+          <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:rsiDistColor }}>{rsiDistText}</div>
         </div>
       </div>
-    </>
+
+      {/* VIX Row */}
+      <div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ minWidth:70 }}>
+            <div style={{ fontSize:12, color:C.text.muted }}>VIX</div>
+            <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{vix.toFixed(1)}</div>
+          </div>
+          <div style={{ flex:1, position:"relative" }}>
+            <div style={{ width:"100%", height:6, background:"#252525", borderRadius:999 }}>
+              <div style={{ width:`${Math.min(100, Math.max(0, vixPercent))}%`, height:"100%", background:vixColor, borderRadius:999, transition:"all 0.4s ease" }} />
+            </div>
+            {/* Threshold markers */}
+            {vixThresholdPositions.map(threshold => {
+              const pos = ((threshold - vixMin) / (vixMax - vixMin)) * 100;
+              return (
+                <div key={threshold} style={{
+                  position:"absolute",
+                  left:`${pos}%`,
+                  top:-2,
+                  width:2,
+                  height:10,
+                  background:C.text.muted,
+                  opacity:0.5
+                }} />
+              );
+            })}
+          </div>
+          <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:vixDistColor }}>{vixDistText}</div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.3); }
+        }
+      `}</style>
+    </div>
   );
-  return noCard ? content : <div className="card" style={{ borderColor:`${color}30` }}>{content}</div>;
 }
 
 // ─── Signal Streak ────────────────────────────────────────────────────────────
@@ -275,109 +401,6 @@ function SignalStreak({ history }) {
   );
 }
 
-// ─── SIGNAL PROXIMITY GAUGE ───────────────────────────────────────────────────
-// Circular arc gauge showing progress toward next signal tier
-function ProximityBars({ rsi, vix }) {
-  if (!rsi || !vix) return null;
-
-  // Tiers in ascending order — find the next one not yet triggered
-  const tiers = [
-    { name:"LOW",     rsiBelow:50, vixAbove:18 },
-    { name:"MEDIUM",  rsiBelow:45, vixAbove:20 },
-    { name:"HIGH",    rsiBelow:35, vixAbove:25 },
-    { name:"EXTREME", rsiBelow:30, vixAbove:30 },
-  ];
-
-  // Find the lowest tier not yet triggered
-  let nextTier = null;
-  for (const t of tiers) {
-    if (rsi >= t.rsiBelow || vix <= t.vixAbove) { nextTier = t; break; }
-  }
-  if (!nextTier) return null; // all tiers triggered = EXTREME already active
-
-  const color = C.signal[nextTier.name];
-  const rsiDist = rsi - nextTier.rsiBelow; // positive = not triggered yet
-  const vixDist = nextTier.vixAbove - vix; // positive = not triggered yet
-
-  // Calculate combined progress score
-  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
-  const rsiProgress = clamp((rsi - nextTier.rsiBelow) / 15 * 100, 0, 100);
-  const vixProgress = clamp((nextTier.vixAbove - vix) / 10 * 100, 0, 100);
-  const combinedScore = Math.round((rsiProgress + vixProgress) / 2);
-
-  // SVG arc parameters
-  const size = 160;
-  const strokeWidth = 12;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const arcLength = circumference * 0.75; // 270 degree arc
-  const offset = circumference * 0.125; // start at top-right
-  const progressLength = (arcLength * combinedScore) / 100;
-
-  return (
-    <div className="card" style={{ borderColor:`${color}30`, marginBottom:12 }}>
-      <SectionLabel>Signal Proximity</SectionLabel>
-
-      {/* Circular gauge */}
-      <div style={{ display:"flex", justifyContent:"center", marginTop:16, marginBottom:16 }}>
-        <div style={{ position:"relative", width:size, height:size }}>
-          <svg width={size} height={size} style={{ transform:"rotate(135deg)" }}>
-            {/* Background track */}
-            <circle
-              cx={size/2}
-              cy={size/2}
-              r={radius}
-              fill="none"
-              stroke="#252525"
-              strokeWidth={strokeWidth}
-              strokeDasharray={`${arcLength} ${circumference}`}
-              strokeDashoffset={-offset}
-              strokeLinecap="round"
-            />
-            {/* Progress arc */}
-            <circle
-              cx={size/2}
-              cy={size/2}
-              r={radius}
-              fill="none"
-              stroke={color}
-              strokeWidth={strokeWidth}
-              strokeDasharray={`${progressLength} ${circumference}`}
-              strokeDashoffset={-offset}
-              strokeLinecap="round"
-              style={{ transition:"stroke-dasharray 0.6s ease" }}
-            />
-          </svg>
-          {/* Center text */}
-          <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%, -50%)", textAlign:"center" }}>
-            <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:28, fontWeight:800, color, lineHeight:1 }}>
-              {combinedScore}%
-            </div>
-            <div style={{ fontSize:11, color:C.text.muted, marginTop:4 }}>to {nextTier.name}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Detail rows */}
-      <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:12 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:12, color:C.text.muted }}>RSI</span>
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, color:C.text.secondary }}>{rsi.toFixed(1)}</span>
-            <span style={{ fontSize:11, color:C.text.muted }}>· {rsiDist.toFixed(1)} to threshold</span>
-          </div>
-        </div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:12, color:C.text.muted }}>VIX</span>
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, color:C.text.secondary }}>{vix.toFixed(1)}</span>
-            <span style={{ fontSize:11, color:C.text.muted }}>· {vixDist.toFixed(1)} to threshold</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── TODAY TAB ────────────────────────────────────────────────────────────────
 function TodayTab() {
@@ -585,23 +608,20 @@ function TodayTab() {
         )}
       </div>
 
-      {/* ── PROXIMITY (conditional) ── */}
-      {signal && <ProximityBars rsi={rsi} vix={vix} />}
+      {/* ── SIGNAL JOURNEY ── */}
+      {signal && <SignalJourney rsi={rsi} vix={vix} />}
 
-      {/* ── DENSE DATA ── */}
+      {/* ── PRICE & DRAWDOWN SUMMARY ── */}
       {signal && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-          {[
-            { label:"RSI", value: rsi?.toFixed(1), highlight: rsi < 35 ? C.red : rsi < 45 ? C.signal.MEDIUM : rsi < 50 ? C.signal.LOW : null },
-            { label:"VIX", value: vix?.toFixed(1), highlight: vix > 25 ? C.red : vix > 20 ? C.signal.MEDIUM : vix > 18 ? C.signal.LOW : null },
-            { label:"PRICE", value: `$${price?.toFixed(2)}`, color:C.text.primary, isPrice: true },
-            { label:"Drawdown", value: `${drawdown?.toFixed(1)}%`, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary },
-          ].map(({ label, value, color, highlight, isPrice }) => (
-            <div key={label} style={{ background: highlight ? `${highlight}12` : "#141414", border: isPrice ? "1px solid #3B82F6" : `1px solid ${highlight ? highlight+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
-              <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight: isPrice ? 700 : 400 }}>{label}</div>
-              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize: isPrice ? 20 : 16, color: color || C.text.primary, fontWeight:500 }}>{value}</div>
-            </div>
-          ))}
+          <div style={{ background:"#141414", border:"1px solid #3B82F6", borderRadius:8, padding:"10px 12px" }}>
+            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight:700 }}>PRICE</div>
+            <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color:C.text.primary, fontWeight:500 }}>${price?.toFixed(2)}</div>
+          </div>
+          <div style={{ background:"#141414", border:`1px solid ${drawdown < -10 ? C.red+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
+            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>Drawdown</div>
+            <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary, fontWeight:500 }}>{drawdown?.toFixed(1)}%</div>
+          </div>
         </div>
       )}
 
@@ -616,8 +636,6 @@ function TodayTab() {
 
           {marketTab === "snapshot" ? (
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-              {/* NextTierIndicator content */}
-              <NextTierIndicator rsi={rsi} vix={vix} noCard />
               {/* DrawdownBands content */}
               <DrawdownBands price={price} high52w={high52w} noCard />
             </div>
