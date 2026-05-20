@@ -257,6 +257,24 @@ function SignalJourney({ rsi, vix, drawdown }) {
   if (drawdown < -15) ddMetThresholds.push("HIGH");
   const ddDistance = getDistanceText(drawdown, ddMetThresholds, "dd");
 
+  // Value colors based on current tier
+  let rsiValueColor = C.text.primary;
+  if (rsi < 30) rsiValueColor = C.signal.EXTREME;
+  else if (rsi < 35) rsiValueColor = C.signal.HIGH;
+  else if (rsi < 45) rsiValueColor = C.signal.MEDIUM;
+  else if (rsi < 50) rsiValueColor = C.signal.LOW;
+
+  let vixValueColor = C.text.primary;
+  if (vix > 30) vixValueColor = C.signal.EXTREME;
+  else if (vix > 25) vixValueColor = C.signal.HIGH;
+  else if (vix > 20) vixValueColor = C.signal.MEDIUM;
+  else if (vix > 18) vixValueColor = C.signal.LOW;
+
+  let ddValueColor = C.text.primary;
+  if (drawdown <= -15) ddValueColor = C.signal.HIGH;
+  else if (drawdown <= -10) ddValueColor = C.signal.MEDIUM;
+  else if (drawdown <= -5) ddValueColor = C.signal.LOW;
+
   // Render segmented bar
   function SegmentedBar({ segments, position, min, max }) {
     const totalRange = Math.abs(max - min);
@@ -305,7 +323,7 @@ function SignalJourney({ rsi, vix, drawdown }) {
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ minWidth:70 }}>
             <div style={{ fontSize:12, color:C.text.muted }}>RSI</div>
-            <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{rsi.toFixed(1)}</div>
+            <div style={{ fontSize:18, fontWeight:600, color:rsiValueColor, fontFamily:"'JetBrains Mono',monospace" }}>{rsi.toFixed(1)}</div>
           </div>
           <div style={{ flex:1 }}>
             <SegmentedBar segments={rsiSegments} position={rsiPos} min={rsiMin} max={rsiMax} />
@@ -333,7 +351,7 @@ function SignalJourney({ rsi, vix, drawdown }) {
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ minWidth:70 }}>
             <div style={{ fontSize:12, color:C.text.muted }}>VIX</div>
-            <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{vix.toFixed(1)}</div>
+            <div style={{ fontSize:18, fontWeight:600, color:vixValueColor, fontFamily:"'JetBrains Mono',monospace" }}>{vix.toFixed(1)}</div>
           </div>
           <div style={{ flex:1 }}>
             <SegmentedBar segments={vixSegments} position={vixPos} min={vixMin} max={vixMax} />
@@ -361,7 +379,7 @@ function SignalJourney({ rsi, vix, drawdown }) {
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ minWidth:70 }}>
             <div style={{ fontSize:12, color:C.text.muted }}>DRAWDOWN</div>
-            <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{drawdown.toFixed(1)}%</div>
+            <div style={{ fontSize:18, fontWeight:600, color:ddValueColor, fontFamily:"'JetBrains Mono',monospace" }}>{drawdown.toFixed(1)}%</div>
           </div>
           <div style={{ flex:1 }}>
             <SegmentedBar segments={ddSegments} position={ddPos} min={ddMin} max={ddMax} />
