@@ -19,7 +19,7 @@ const C = {
     WATCH:   "#EAB308",
   },
   bg: { primary: "#0A0A0A", secondary: "#141414", card: "#1C1C1C", border: "#252525" },
-  text: { primary: "#F0F0F0", secondary: "#9CA3AF", muted: "#4B5563" },
+  text: { primary: "#F0F0F0", secondary: "#D1D5DB", muted: "#9CA3AF" },
   accent: "#3B82F6",
   green:  "#10B981",
   red:    "#EF4444",
@@ -84,7 +84,7 @@ const globalStyle = `
   .chat-bubble-ai { background:#1C1C1C;border:1px solid #252525;border-radius:12px 12px 12px 2px;padding:10px 14px;margin-right:40px; }
   input,textarea { background:#141414;border:1px solid #252525;border-radius:8px;color:#F0F0F0;font-family:'DM Sans',sans-serif;font-size:14px;padding:10px 12px;width:100%;outline:none;transition:border-color .15s; }
   input:focus,textarea:focus { border-color:#3B82F6; }
-  input::placeholder,textarea::placeholder { color:#4B5563; }
+  input::placeholder,textarea::placeholder { color:#9CA3AF; }
   .overlay { position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:50;display:flex;align-items:flex-end; }
   .sheet { background:#1C1C1C;border:1px solid #252525;border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:520px;margin:0 auto; }
 `;
@@ -106,7 +106,7 @@ function SignalBadge({ signal, size = "lg" }) {
 }
 
 function SectionLabel({ children }) {
-  return <div style={{ fontSize:12, color:C.text.muted, textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>{children}</div>;
+  return <div style={{ fontSize:12, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>{children}</div>;
 }
 
 function ErrorState({ message, onRetry }) {
@@ -1427,7 +1427,7 @@ function SignalCalendar({ history }) {
   const todayMonth = today.getMonth() + 1;
   const todayDay = today.getDate();
 
-  if (!months.length) return <div style={{ textAlign:"center", padding:"40px 20px", color:"#4B5563", fontSize:14 }}>No signal history yet.</div>;
+  if (!months.length) return <div style={{ textAlign:"center", padding:"40px 20px", color:C.text.muted, fontSize:14 }}>No signal history yet.</div>;
 
   return (
     <div>
@@ -1461,7 +1461,7 @@ function SignalCalendar({ history }) {
 
             {/* Day-of-week headers */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
-              {DOW.map(d => <div key={d} style={{ textAlign:"center", fontSize:9, color:"#4B5563", fontWeight:600 }}>{d}</div>)}
+              {DOW.map(d => <div key={d} style={{ textAlign:"center", fontSize:9, color:C.text.muted, fontWeight:600 }}>{d}</div>)}
             </div>
 
             {/* Weeks — reversed so most recent is at top */}
@@ -1488,7 +1488,7 @@ function SignalCalendar({ history }) {
                         alignItems:"center",
                         justifyContent:"center",
                         fontSize:10,
-                        color: isToday ? "#F0F0F0" : (color || "#4B5563"),
+                        color: isToday ? "#F0F0F0" : (color || C.text.muted),
                         fontWeight: isToday ? 700 : (color ? 700 : 400),
                         fontFamily:"'JetBrains Mono',monospace",
                       }}>
@@ -1508,7 +1508,7 @@ function SignalCalendar({ history }) {
               }).map(t => (
                 <div key={t} style={{ display:"flex", alignItems:"center", gap:4 }}>
                   <div style={{ width:8, height:8, borderRadius:2, background:sigColors[t] }} />
-                  <span style={{ fontSize:10, color:"#4B5563" }}>{t}</span>
+                  <span style={{ fontSize:10, color:C.text.muted }}>{t}</span>
                 </div>
               ))}
             </div>
@@ -1531,7 +1531,7 @@ function HistoryList({ history }) {
         <button className={"pill-btn "+(filter==="all"?"active":"")} onClick={() => setFilter("all")}>All days</button>
       </div>
       {filtered.length === 0
-        ? <div style={{ textAlign:"center", padding:"40px 20px", color:"#4B5563", fontSize:14 }}>No signal days in this range.</div>
+        ? <div style={{ textAlign:"center", padding:"40px 20px", color:C.text.muted, fontSize:14 }}>No signal days in this range.</div>
         : filtered.map((d, i) => {
             const isSig = d.signal_tier !== "NONE";
             const color = sigColors[d.signal_tier];
@@ -1541,17 +1541,17 @@ function HistoryList({ history }) {
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <div>
                       <div style={{ fontSize:14, color:"#F0F0F0" }}>{fmt.date(d.date)}</div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:"#4B5563", marginTop:2 }}>RSI {Number(d.rsi).toFixed(1)} · VIX {Number(d.vix).toFixed(1)} · ${Number(d.vdgr_price).toFixed(2)}</div>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:C.text.secondary, marginTop:2 }}>RSI {Number(d.rsi).toFixed(1)} · VIX {Number(d.vix).toFixed(1)} · ${Number(d.vdgr_price).toFixed(2)}</div>
                     </div>
                     <div style={{ textAlign:"right" }}>
                       <div style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", background:color+"18", border:"2px solid "+color, borderRadius:999, padding:"4px 12px" }}>
                         <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:800, color, letterSpacing:2 }}>{d.signal_tier}</span>
                       </div>
-                      {d.recommended_amount > 0 && <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:"#4B5563", marginTop:4 }}>${d.recommended_amount}</div>}
+                      {d.recommended_amount > 0 && <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:C.text.secondary, marginTop:4 }}>${d.recommended_amount}</div>}
                     </div>
                   </div>
                 ) : (
-                  <><div style={{ fontSize:13, color:"#9CA3AF" }}>{fmt.date(d.date)}</div><div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:"#4B5563" }}>— NONE</div></>
+                  <><div style={{ fontSize:13, color:C.text.secondary }}>{fmt.date(d.date)}</div><div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:C.text.secondary }}>— NONE</div></>
                 )}
               </div>
             );
@@ -1586,7 +1586,7 @@ function BacktestTab() {
     <div className="tab-content fade-in">
       <div style={{ marginBottom:16 }}>
         <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:700, marginBottom:4 }}>Backtest Simulator</div>
-        <div style={{ fontSize:13, color:"#4B5563", lineHeight:1.5 }}>Simulates buying the recommended amount on every MEDIUM+ signal day, holding forever.</div>
+        <div style={{ fontSize:13, color:C.text.secondary, lineHeight:1.5 }}>Simulates buying the recommended amount on every MEDIUM+ signal day, holding forever.</div>
       </div>
       <div style={{ display:"flex", gap:6, marginBottom:16 }}>
         {ranges.map(r => (
@@ -1594,15 +1594,15 @@ function BacktestTab() {
         ))}
       </div>
       {loading ? (<><div className="card"><div className="skeleton" style={{ height:120 }} /></div><div className="card"><div className="skeleton" style={{ height:180 }} /></div></>) :
-       error ? <div style={{ textAlign:"center", padding:"40px 20px" }}><div style={{ fontSize:13, color:"#4B5563", marginBottom:12 }}>{error}</div></div> :
+       error ? <div style={{ textAlign:"center", padding:"40px 20px" }}><div style={{ fontSize:13, color:C.text.secondary, marginBottom:12 }}>{error}</div></div> :
        !data ? (
-        <div style={{ textAlign:"center", padding:"40px 20px", color:"#4B5563", fontSize:14, lineHeight:1.6 }}>
+        <div style={{ textAlign:"center", padding:"40px 20px", color:C.text.secondary, fontSize:14, lineHeight:1.6 }}>
           Not enough signal history yet.<br />Come back once the system has been running for a few weeks.
         </div>
        ) : (
         <>
           <div className="card">
-            <div style={{ fontSize:12, color:"#4B5563", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Simulated Result · {ranges.find(r=>r.v===range)?.l}</div>
+            <div style={{ fontSize:12, color:C.text.muted, textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Simulated Result · {ranges.find(r=>r.v===range)?.l}</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
               {[
                 { label:"Simulated Invested", value: fmt.aud(data.total_invested) },
@@ -1611,20 +1611,20 @@ function BacktestTab() {
                 { label:"Return",             value: (data.return_pct>=0?"+":"")+Number(data.return_pct).toFixed(2)+"%", color: profitColor },
               ].map(s => (
                 <div key={s.label} style={{ background:"#141414", borderRadius:8, padding:"10px 12px" }}>
-                  <div style={{ fontSize:11, color:"#4B5563", marginBottom:4 }}>{s.label}</div>
+                  <div style={{ fontSize:11, color:C.text.muted, marginBottom:4 }}>{s.label}</div>
                   <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:15, fontWeight:500, color: s.color || "#F0F0F0" }}>{s.value}</div>
                 </div>
               ))}
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", paddingTop:8, borderTop:"1px solid #252525" }}>
-              <span style={{ fontSize:12, color:"#4B5563" }}>Buys: <span style={{ fontFamily:"'JetBrains Mono',monospace" }}>{data.trade_count}</span></span>
-              <span style={{ fontSize:12, color:"#4B5563" }}>Units: <span style={{ fontFamily:"'JetBrains Mono',monospace" }}>{Number(data.total_units).toFixed(4)}</span></span>
-              <span style={{ fontSize:12, color:"#4B5563" }}>@ <span style={{ fontFamily:"'JetBrains Mono',monospace", color:"#3B82F6" }}>${Number(data.current_price).toFixed(2)}</span></span>
+              <span style={{ fontSize:12, color:C.text.secondary }}>Buys: <span style={{ fontFamily:"'JetBrains Mono',monospace" }}>{data.trade_count}</span></span>
+              <span style={{ fontSize:12, color:C.text.secondary }}>Units: <span style={{ fontFamily:"'JetBrains Mono',monospace" }}>{Number(data.total_units).toFixed(4)}</span></span>
+              <span style={{ fontSize:12, color:C.text.secondary }}>@ <span style={{ fontFamily:"'JetBrains Mono',monospace", color:"#3B82F6" }}>${Number(data.current_price).toFixed(2)}</span></span>
             </div>
           </div>
           {chartData.length > 1 && (
             <div className="card">
-              <div style={{ fontSize:12, color:"#4B5563", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Cumulative Invested vs Value</div>
+              <div style={{ fontSize:12, color:C.text.muted, textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Cumulative Invested vs Value</div>
               <ResponsiveContainer width="100%" height={200}>
                 <AreaChart data={chartData}>
                   <defs>
@@ -1632,8 +1632,8 @@ function BacktestTab() {
                     <linearGradient id="btI" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2}/><stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/></linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#252525" />
-                  <XAxis dataKey="date" tick={{ fill:"#4B5563", fontSize:10 }} interval={Math.max(0,Math.floor(chartData.length/5)-1)} />
-                  <YAxis tick={{ fill:"#4B5563", fontSize:11 }} width={55} tickFormatter={v=>"$"+Number(v).toFixed(0)} />
+                  <XAxis dataKey="date" tick={{ fill:C.text.muted, fontSize:10 }} interval={Math.max(0,Math.floor(chartData.length/5)-1)} />
+                  <YAxis tick={{ fill:C.text.muted, fontSize:11 }} width={55} tickFormatter={v=>"$"+Number(v).toFixed(0)} />
                   <Tooltip contentStyle={{ background:"#1C1C1C", border:"1px solid #252525", borderRadius:8, fontSize:12 }} formatter={v=>[fmt.aud(v)]} />
                   <Area type="stepAfter" dataKey="invested" stroke="#3B82F6" fill="url(#btI)" strokeWidth={2} name="Invested" />
                   <Area type="monotone"  dataKey="value"    stroke="#10B981" fill="url(#btV)" strokeWidth={2} name="Value" />
@@ -1643,7 +1643,7 @@ function BacktestTab() {
           )}
           {data.tier_summary?.length > 0 && (
             <div className="card">
-              <div style={{ fontSize:12, color:"#4B5563", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>By Signal Tier</div>
+              <div style={{ fontSize:12, color:C.text.muted, textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>By Signal Tier</div>
               {["EXTREME","HIGH","MEDIUM"].map(tier => {
                 const r = data.tier_summary.find(t => t.tier === tier);
                 if (!r) return null;
@@ -1653,11 +1653,11 @@ function BacktestTab() {
                       <div style={{ display:"inline-flex", alignItems:"center", background:sigColors[tier]+"18", border:"2px solid "+sigColors[tier], borderRadius:999, padding:"4px 12px" }}>
                         <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:800, color:sigColors[tier], letterSpacing:2 }}>{tier}</span>
                       </div>
-                      <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, color:"#4B5563" }}>{r.count} buys</span>
+                      <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, color:C.text.secondary }}>{r.count} buys</span>
                     </div>
                     <div style={{ textAlign:"right" }}>
                       <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color: r.return_pct >= 0 ? "#10B981" : "#EF4444" }}>{r.return_pct >= 0 ? "+" : ""}{Number(r.return_pct).toFixed(1)}%</div>
-                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:"#4B5563" }}>{fmt.aud(r.invested)}</div>
+                      <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:C.text.secondary }}>{fmt.aud(r.invested)}</div>
                     </div>
                   </div>
                 );
@@ -1665,16 +1665,16 @@ function BacktestTab() {
             </div>
           )}
           <div className="card">
-            <div style={{ fontSize:12, color:"#4B5563", textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Signal Trade Log</div>
+            <div style={{ fontSize:12, color:C.text.muted, textTransform:"uppercase", letterSpacing:.8, marginBottom:10 }}>Signal Trade Log</div>
             <div style={{ maxHeight:300, overflowY:"auto" }}>
               {[...(data.trades||[])].reverse().map((t, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #1E1E1E" }}>
                   <div>
                     <div style={{ fontSize:13, color:"#F0F0F0" }}>{fmt.date(t.date)}</div>
-                    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:"#4B5563" }}>@ ${Number(t.buy_price).toFixed(2)} · {Number(t.units).toFixed(4)} units</div>
+                    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:11, color:C.text.secondary }}>@ ${Number(t.buy_price).toFixed(2)} · {Number(t.units).toFixed(4)} units</div>
                   </div>
                   <div style={{ textAlign:"right" }}>
-                    <div style={{ color:sigColors[t.signal_tier]||"#4B5563", fontSize:12, fontWeight:600 }}>{t.signal_tier}</div>
+                    <div style={{ color:sigColors[t.signal_tier]||C.text.secondary, fontSize:12, fontWeight:600 }}>{t.signal_tier}</div>
                     <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color:"#F0F0F0" }}>{fmt.aud(t.amount)}</div>
                   </div>
                 </div>
@@ -1730,7 +1730,7 @@ function SettingsTab() {
   function Fld({ label, k, step=0.5 }) {
     return (
       <div style={{ flex:1, minWidth:70 }}>
-        <label style={{ fontSize:11, color:"#4B5563", display:"block", marginBottom:4 }}>{label}</label>
+        <label style={{ fontSize:11, color:C.text.muted, display:"block", marginBottom:4 }}>{label}</label>
         <input type="number" step={step} value={settings?.[k]??""} onChange={e => setSettings(s=>({...s,[k]:e.target.value}))} style={{ fontSize:13, padding:"7px 10px" }} />
       </div>
     );
@@ -1740,10 +1740,10 @@ function SettingsTab() {
     <div className="tab-content fade-in">
       <div style={{ marginBottom:16 }}>
         <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:700, marginBottom:4 }}>Signal Settings</div>
-        <div style={{ fontSize:13, color:"#4B5563", lineHeight:1.5 }}>Adjust thresholds and investment amounts. Changes apply at next 8am AEDT cron run.</div>
+        <div style={{ fontSize:13, color:C.text.secondary, lineHeight:1.5 }}>Adjust thresholds and investment amounts. Changes apply at next 8am AEDT cron run.</div>
       </div>
       {loading ? <><div className="card"><div className="skeleton" style={{ height:120 }} /></div><div className="card"><div className="skeleton" style={{ height:120 }} /></div></> :
-       error ? <div style={{ textAlign:"center", padding:"40px 20px", color:"#4B5563" }}>{error}</div> : (
+       error ? <div style={{ textAlign:"center", padding:"40px 20px", color:C.text.secondary }}>{error}</div> : (
         <>
           {tiers.map(t => (
             <div key={t.name} className="card" style={{ borderColor:sigColors[t.name]+"30" }}>
@@ -1751,7 +1751,7 @@ function SettingsTab() {
                 <div style={{ display:"inline-flex", alignItems:"center", background:sigColors[t.name]+"18", border:"2px solid "+sigColors[t.name], borderRadius:999, padding:"4px 12px" }}>
                   <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:800, color:sigColors[t.name], letterSpacing:2 }}>{t.name}</span>
                 </div>
-                <span style={{ fontSize:12, color:"#4B5563" }}>RSI AND VIX{t.dd?" AND Drawdown":""} must be met</span>
+                <span style={{ fontSize:12, color:C.text.muted }}>RSI AND VIX{t.dd?" AND Drawdown":""} must be met</span>
               </div>
               <div style={{ display:"flex", gap:8, marginBottom: t.dd?8:0 }}>
                 <Fld label="RSI below" k={t.rsi} />
@@ -1761,12 +1761,12 @@ function SettingsTab() {
               {t.dd && (
                 <div style={{ display:"flex", gap:8 }}>
                   <Fld label="Drawdown below (%)" k={t.dd} />
-                  <div style={{ flex:2, fontSize:12, color:"#4B5563", padding:"8px 10px", background:"#141414", borderRadius:8, alignSelf:"flex-end" }}>e.g. -10 = 10% below 52w high</div>
+                  <div style={{ flex:2, fontSize:12, color:C.text.muted, padding:"8px 10px", background:"#141414", borderRadius:8, alignSelf:"flex-end" }}>e.g. -10 = 10% below 52w high</div>
                 </div>
               )}
             </div>
           ))}
-          <div style={{ padding:"12px 14px", background:"#141414", borderRadius:8, marginBottom:12, fontSize:12, color:"#4B5563", lineHeight:1.8 }}>
+          <div style={{ padding:"12px 14px", background:"#141414", borderRadius:8, marginBottom:12, fontSize:12, color:C.text.muted, lineHeight:1.8 }}>
             <strong style={{ color:"#9CA3AF" }}>Defaults:</strong> LOW: RSI&lt;50, VIX&gt;18 · MEDIUM: RSI&lt;45, VIX&gt;20, $200 · HIGH: RSI&lt;35, VIX&gt;25, $400 · EXTREME: RSI&lt;30, VIX&gt;30, DD&lt;-10%, $800
           </div>
           <button className="btn btn-primary" style={{ width:"100%", padding:"12px", fontSize:15 }} onClick={saveSettings} disabled={saving}>
@@ -1812,9 +1812,9 @@ function MoreDrawer({ onSelect, onClose }) {
             </div>
             <div>
               <div style={{ fontSize:15, fontWeight:600, color:"#F0F0F0" }}>{item.label}</div>
-              <div style={{ fontSize:12, color:"#4B5563", marginTop:2 }}>{item.desc}</div>
+              <div style={{ fontSize:12, color:C.text.muted, marginTop:2 }}>{item.desc}</div>
             </div>
-            <div style={{ marginLeft:"auto", color:"#4B5563", fontSize:18 }}>›</div>
+            <div style={{ marginLeft:"auto", color:C.text.muted, fontSize:18 }}>›</div>
           </button>
         ))}
       </div>
@@ -1941,7 +1941,7 @@ export default function App() {
                 style={{
                   flex:1, padding:"10px 4px 14px", background:"transparent", border:"none",
                   cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center",
-                  gap:4, color: active ? "#3B82F6" : "#4B5563", transition:"color .15s",
+                  gap:4, color: active ? "#3B82F6" : "#9CA3AF", transition:"color .15s",
                   position:"relative", WebkitTapHighlightColor:"transparent",
                 }}
               >
