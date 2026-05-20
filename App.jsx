@@ -259,12 +259,12 @@ function SignalJourney({ rsi, vix, drawdown }) {
 
   // Render segmented bar
   function SegmentedBar({ segments, position, min, max }) {
-    const totalRange = max - min;
+    const totalRange = Math.abs(max - min);
     return (
       <div style={{ flex:1, position:"relative", height:6 }}>
         <div style={{ display:"flex", width:"100%", height:"100%", overflow:"hidden" }}>
           {segments.map((seg, i) => {
-            const segWidth = ((seg.start - seg.end) / totalRange) * 100;
+            const segWidth = (Math.abs(seg.end - seg.start) / totalRange) * 100;
             const isFirst = i === 0;
             const isLast = i === segments.length - 1;
             return (
@@ -589,11 +589,11 @@ function TodayTab() {
       {signal && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
           <div style={{ background:"#141414", border:"1px solid #3B82F6", borderRadius:8, padding:"10px 12px" }}>
-            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight:700 }}>PRICE</div>
+            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight:700 }}>CURRENT PRICE</div>
             <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color:C.text.primary, fontWeight:500 }}>${price?.toFixed(2)}</div>
           </div>
           <div style={{ background:"#141414", border:`1px solid ${drawdown < -10 ? C.red+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
-            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>Drawdown</div>
+            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>DRAWDOWN (52W HIGH)</div>
             <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary, fontWeight:500 }}>{drawdown?.toFixed(1)}%</div>
           </div>
         </div>
