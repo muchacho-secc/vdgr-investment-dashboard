@@ -261,7 +261,7 @@ function SignalJourney({ rsi, vix, drawdown }) {
   function SegmentedBar({ segments, position, min, max }) {
     const totalRange = Math.abs(max - min);
     return (
-      <div style={{ flex:1, position:"relative", height:6 }}>
+      <div style={{ position:"relative", height:6 }}>
         <div style={{ display:"flex", width:"100%", height:"100%", overflow:"hidden" }}>
           {segments.map((seg, i) => {
             const segWidth = (Math.abs(seg.end - seg.start) / totalRange) * 100;
@@ -307,7 +307,23 @@ function SignalJourney({ rsi, vix, drawdown }) {
             <div style={{ fontSize:12, color:C.text.muted }}>RSI</div>
             <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{rsi.toFixed(1)}</div>
           </div>
-          <SegmentedBar segments={rsiSegments} position={rsiPos} min={rsiMin} max={rsiMax} />
+          <div style={{ flex:1 }}>
+            <SegmentedBar segments={rsiSegments} position={rsiPos} min={rsiMin} max={rsiMax} />
+            <div style={{ position:"relative", height:14, marginTop:2 }}>
+              {[50, 45, 35, 30].map(threshold => {
+                const pos = ((rsiMax - threshold) / (rsiMax - rsiMin)) * 100;
+                return (
+                  <div key={threshold} style={{
+                    position:"absolute",
+                    left:`${pos}%`,
+                    transform:"translateX(-50%)",
+                    fontSize:9,
+                    color:C.text.muted
+                  }}>{threshold}</div>
+                );
+              })}
+            </div>
+          </div>
           <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:rsiDistance.color }}>{rsiDistance.text}</div>
         </div>
       </div>
@@ -319,7 +335,23 @@ function SignalJourney({ rsi, vix, drawdown }) {
             <div style={{ fontSize:12, color:C.text.muted }}>VIX</div>
             <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{vix.toFixed(1)}</div>
           </div>
-          <SegmentedBar segments={vixSegments} position={vixPos} min={vixMin} max={vixMax} />
+          <div style={{ flex:1 }}>
+            <SegmentedBar segments={vixSegments} position={vixPos} min={vixMin} max={vixMax} />
+            <div style={{ position:"relative", height:14, marginTop:2 }}>
+              {[18, 20, 25, 30].map(threshold => {
+                const pos = ((threshold - vixMin) / (vixMax - vixMin)) * 100;
+                return (
+                  <div key={threshold} style={{
+                    position:"absolute",
+                    left:`${pos}%`,
+                    transform:"translateX(-50%)",
+                    fontSize:9,
+                    color:C.text.muted
+                  }}>{threshold}</div>
+                );
+              })}
+            </div>
+          </div>
           <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:vixDistance.color }}>{vixDistance.text}</div>
         </div>
       </div>
@@ -331,7 +363,23 @@ function SignalJourney({ rsi, vix, drawdown }) {
             <div style={{ fontSize:12, color:C.text.muted }}>DRAWDOWN</div>
             <div style={{ fontSize:18, fontWeight:600, color:C.text.primary, fontFamily:"'JetBrains Mono',monospace" }}>{drawdown.toFixed(1)}%</div>
           </div>
-          <SegmentedBar segments={ddSegments} position={ddPos} min={ddMin} max={ddMax} />
+          <div style={{ flex:1 }}>
+            <SegmentedBar segments={ddSegments} position={ddPos} min={ddMin} max={ddMax} />
+            <div style={{ position:"relative", height:14, marginTop:2, marginBottom:6 }}>
+              {[-5, -10, -15].map(threshold => {
+                const pos = ((threshold - ddMin) / (ddMax - ddMin)) * 100;
+                return (
+                  <div key={threshold} style={{
+                    position:"absolute",
+                    left:`${pos}%`,
+                    transform:"translateX(-50%)",
+                    fontSize:9,
+                    color:C.text.muted
+                  }}>{threshold}%</div>
+                );
+              })}
+            </div>
+          </div>
           <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:ddDistance.color }}>{ddDistance.text}</div>
         </div>
       </div>
