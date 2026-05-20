@@ -1865,12 +1865,20 @@ export default function App() {
   const [globalSignal, setGlobalSignal] = useState(null);
 
   useEffect(() => {
-    api("/signal/history?days=730")
+    api("/signal/chart?range=1y")
       .then(d => {
-        console.log('History data:', d.history?.length, d.history?.[0], d.history?.[d.history?.length-1]);
-        const history = (d.history || []).map(h => ({ ...h, signal_tier: h.signal_tier === "WATCH" ? "LOW" : (h.signal_tier || "NONE") }));
-        console.log("History data loaded:", history.length, "days");
-        setHistoryData(history);
+        console.log('Chart data (Yahoo Finance):', d.chartData?.length, d.chartData?.[0], d.chartData?.[d.chartData?.length-1]);
+        const mapped = (d.chartData || []).map(item => ({
+          date: item.date,
+          signal_tier: item.signal_tier === 'WATCH' ? 'LOW' : (item.signal_tier || 'NONE'),
+          rsi: item.rsi,
+          vix: item.vix,
+          vdgr_price: item.price,
+          drawdown_pct: item.drawdown,
+          recommended_amount: 0,
+        }));
+        console.log("History data loaded from Yahoo Finance:", mapped.length, "days");
+        setHistoryData(mapped);
       })
       .catch(() => {});
     // Fetch global signal for header
