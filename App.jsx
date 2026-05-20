@@ -1245,17 +1245,12 @@ function PerformanceTab() {
   const [perf, setPerf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dailyPrices, setDailyPrices] = useState([]);
 
   async function loadPerf() {
     setLoading(true); setError(null);
     try {
-      const [perfData, chartData] = await Promise.all([
-        api("/performance"),
-        api("/signal/chart?range=1y"),
-      ]);
+      const perfData = await api("/performance");
       setPerf(perfData);
-      setDailyPrices(chartData.chartData || []);
     }
     catch { setError("Unable to load performance data."); }
     setLoading(false);
@@ -1276,76 +1271,8 @@ function PerformanceTab() {
   const { summary, snapshots, forwardReturns, ledger } = perf;
   const profitColor = summary.returnDollar >= 0 ? C.green : C.red;
 
-  // Build daily time series for portfolio growth chart
-  const buildDailyTimeSeries = () => {
-    if (!ledger || ledger.length === 0 || !dailyPrices || dailyPrices.length === 0) return [];
-
-    // Sort ledger by date ascending
-    const sortedLedger = [...ledger].sort((a, b) => new Date(a.date) - new Date(b.date));
-    const firstBuyDate = sortedLedger[0].date;
-
-    // Filter signal chart data to dates on or after first buy
-    const filteredPrices = dailyPrices
-      .filter(p => p.date >= firstBuyDate)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    // Create ledger lookup by date
-    const ledgerByDate = {};
-    sortedLedger.forEach(e => {
-      ledgerByDate[e.date] = e;
-    });
-
-    // Build chart data
-    const chartData = [];
-    let runningUnits = 0;
-    let runningInvested = 0;
-
-    filteredPrices.forEach(priceData => {
-      const currentDate = priceData.date;
-      const price = parseFloat(priceData.price);
-
-      // Calculate running totals up to this date
-      sortedLedger.forEach(entry => {
-        if (entry.date <= currentDate) {
-          // Check if we haven't counted this entry yet
-          const alreadyCounted = chartData.some(d => d.date === entry.date);
-          if (!alreadyCounted || entry.date === currentDate) {
-            // Only add if this is the first time we're seeing this date or if it's today
-            if (entry.date === currentDate && !chartData.some(d => d.date === currentDate)) {
-              runningUnits += parseFloat(entry.units_acquired);
-              runningInvested += parseFloat(entry.actual_amount);
-            }
-          }
-        }
-      });
-
-      // Recalculate running totals properly
-      const unitsUpToDate = sortedLedger
-        .filter(e => e.date <= currentDate)
-        .reduce((sum, e) => sum + parseFloat(e.units_acquired), 0);
-
-      const investedUpToDate = sortedLedger
-        .filter(e => e.date <= currentDate)
-        .reduce((sum, e) => sum + parseFloat(e.actual_amount), 0);
-
-      // Only include if at least one buy has occurred
-      if (unitsUpToDate > 0) {
-        const portfolioValue = unitsUpToDate * price;
-
-        chartData.push({
-          date: currentDate,
-          dateFormatted: new Date(currentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short" }),
-          portfolio_value: portfolioValue,
-          total_invested: investedUpToDate,
-          isBuyDay: !!ledgerByDate[currentDate],
-        });
-      }
-    });
-
-    return chartData;
-  };
-
-  const chartData = buildDailyTimeSeries();
+  // Sort ledger by date ascending for per-trade display
+  const sortedLedger = ledger ? [...ledger].sort((a, b) => new Date(a.date) - new Date(b.date)) : [];
 
   const tierBreakdown = {};
   (ledger || []).forEach(e => {
@@ -1368,86 +1295,64 @@ function PerformanceTab() {
 
   return (
     <div className="tab-content fade-in">
-      <div className="card">
-        <SectionLabel>Live Performance</SectionLabel>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          {[
-            { label:"Total Invested", value: fmt.aud(summary.totalInvested) },
-            { label:"Current Value", value: summary.currentValue !== null ? fmt.aud(summary.currentValue) : "—", color: summary.currentValue >= summary.totalInvested ? C.green : C.red },
-            { label:"Profit / Loss", value: summary.returnDollar !== null ? `${summary.returnDollar>=0?"+":""}${fmt.aud(summary.returnDollar)}` : "—", color: profitColor },
-            { label:"Return", value: summary.returnPct !== null ? `${summary.returnPct>=0?"+":""}${Number(summary.returnPct).toFixed(2)}%` : "—", color: profitColor },
-          ].map(s => (
-            <div key={s.label} style={{ background:"#141414", borderRadius:8, padding:"10px 12px" }}>
-              <div style={{ fontSize:11, color:C.text.muted, marginBottom:4 }}>{s.label}</div>
-              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:16, fontWeight:500, color: s.color || C.text.primary }}>{s.value}</div>
-            </div>
-          ))}
+      {/* Hero P&L Display */}
+      <div className="card" style={{ textAlign:"center", padding:"32px 20px 24px" }}>
+        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:52, fontWeight:800, color:profitColor, lineHeight:1 }}>
+          {summary.returnDollar !== null ? `${summary.returnDollar >= 0 ? "+" : ""}${fmt.aud(summary.returnDollar)}` : "—"}
         </div>
-        <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid #252525", display:"flex", justifyContent:"space-between" }}>
-          <span style={{ fontSize:12, color:C.text.muted }}>Units: <span className="mono">{Number(summary.totalUnits).toFixed(4)}</span></span>
-          {summary.currentPrice && <span style={{ fontSize:12, color:C.text.muted }}>VDGR: <span className="mono" style={{ color:C.accent }}>${Number(summary.currentPrice).toFixed(2)}</span></span>}
+        <div style={{ fontSize:18, color:profitColor, marginTop:8 }}>
+          {summary.returnPct !== null ? `${summary.returnPct >= 0 ? "+" : ""}${Number(summary.returnPct).toFixed(2)}%` : "—"}
         </div>
-        {summary.totalUnits > 0 && (
-          <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid #252525" }}>
-            <span style={{ fontSize:12, color:C.text.muted }}>Avg cost basis: <span className="mono" style={{ color:C.text.secondary }}>${(summary.totalInvested / summary.totalUnits).toFixed(2)}</span></span>
-          </div>
-        )}
+        <div style={{ fontSize:13, color:C.text.muted, marginTop:6 }}>
+          on {fmt.aud(summary.totalInvested)} invested
+        </div>
       </div>
-      {chartData.length > 1 && (
-        <div className="card">
-          <SectionLabel>Portfolio Growth</SectionLabel>
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={chartData}>
-              <defs>
-                <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#F0F0F0" stopOpacity={0.12} />
-                  <stop offset="95%" stopColor="#F0F0F0" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#252525" />
-              <XAxis dataKey="dateFormatted" tick={{ fill:C.text.muted, fontSize:10 }} />
-              <YAxis tick={{ fill:C.text.muted, fontSize:11 }} width={55} tickFormatter={v => `$${Number(v).toFixed(0)}`} />
-              <Tooltip
-                contentStyle={{ background:"#1C1C1C", border:"1px solid #252525", borderRadius:8, fontSize:12 }}
-                formatter={(v, name) => {
-                  if (name === "total_invested") return [fmt.aud(v), "Total Invested"];
-                  if (name === "portfolio_value") return [fmt.aud(v), "Portfolio Value"];
-                  return [v, name];
-                }}
-                labelFormatter={(label, payload) => {
-                  if (!payload || !payload[0]) return label;
-                  const data = payload[0].payload;
-                  const profit = data.portfolio_value - data.total_invested;
-                  const returnPct = data.total_invested > 0 ? ((profit / data.total_invested) * 100).toFixed(1) : "0.0";
-                  return `${label} · ${profit >= 0 ? "+" : ""}${fmt.aud(profit)} (${returnPct}%)`;
-                }}
-              />
-              {/* Portfolio value area (white) */}
-              <Area type="monotone" dataKey="portfolio_value" stroke="#F0F0F0" fill="url(#portfolioGrad)" strokeWidth={2} name="portfolio_value" />
-              {/* Total invested line (orange, on top) */}
-              <Line type="stepAfter" dataKey="total_invested" stroke="#F97316" strokeWidth={3} dot={false} name="total_invested" />
-              {/* Buy markers - orange circles */}
-              <Scatter
-                data={chartData.filter(d => d.isBuyDay)}
-                fill="#F97316"
-                shape={(props) => {
-                  const { cx, cy } = props;
-                  return (
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={6}
-                      fill="#F97316"
-                      stroke="#0A0A0A"
-                      strokeWidth={1.5}
-                    />
-                  );
-                }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+
+      {/* By Trade - Horizontal bars */}
+      <div className="card">
+        <SectionLabel>BY TRADE</SectionLabel>
+        <div style={{ display:"flex", flexDirection:"column", gap:16, marginTop:12 }}>
+          {sortedLedger.map((trade, i) => {
+            const tradeValue = parseFloat(trade.units_acquired) * (summary.currentPrice || 0);
+            const tradeReturn = parseFloat(trade.actual_amount) > 0
+              ? ((tradeValue - parseFloat(trade.actual_amount)) / parseFloat(trade.actual_amount)) * 100
+              : 0;
+            const tradeColor = tradeReturn >= 0 ? C.green : C.red;
+            const barWidth = Math.min(Math.max(Math.abs(tradeReturn) / 10 * 100, 2), 100);
+
+            return (
+              <div key={i}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
+                  <div style={{ fontSize:12, color:C.text.muted, fontFamily:"'JetBrains Mono',monospace", minWidth:60 }}>
+                    {fmt.short(trade.date)}
+                  </div>
+                  <div style={{ flex:1, background:"#252525", height:8, borderRadius:999, overflow:"hidden" }}>
+                    <div style={{ width:`${barWidth}%`, height:"100%", background:tradeColor, borderRadius:999, transition:"width 0.4s ease" }} />
+                  </div>
+                  <div style={{ fontSize:13, fontFamily:"'JetBrains Mono',monospace", color:tradeColor, minWidth:60, textAlign:"right" }}>
+                    {tradeReturn >= 0 ? "+" : ""}{tradeReturn.toFixed(1)}%
+                  </div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, paddingLeft:72 }}>
+                  <SignalBadge signal={normaliseTier(trade.signal_tier)} size="sm" />
+                  <span style={{ fontSize:11, color:C.text.muted }}>·</span>
+                  <span style={{ fontSize:11, color:C.text.muted }}>{fmt.aud(parseFloat(trade.actual_amount))}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+
+        {/* Summary footer */}
+        <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid #252525", display:"flex", justifyContent:"space-between" }}>
+          <span style={{ fontSize:12, color:C.text.muted, fontFamily:"'JetBrains Mono',monospace" }}>
+            Total invested: {fmt.aud(summary.totalInvested)}
+          </span>
+          <span style={{ fontSize:12, color:C.text.muted, fontFamily:"'JetBrains Mono',monospace" }}>
+            Current value: {summary.currentValue !== null ? fmt.aud(summary.currentValue) : "—"}
+          </span>
+        </div>
+      </div>
       {tierRows.length > 0 && (
         <div className="card">
           <SectionLabel>Breakdown by Signal Tier</SectionLabel>
