@@ -588,7 +588,7 @@ function TodayTab() {
       {/* ── PRICE & DRAWDOWN SUMMARY ── */}
       {signal && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-          <div style={{ background:"#141414", border:"1px solid #3B82F6", borderRadius:8, padding:"10px 12px" }}>
+          <div style={{ background:"#141414", border:"1px solid #252525", borderRadius:8, padding:"10px 12px" }}>
             <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight:700 }}>CURRENT PRICE</div>
             <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color:C.text.primary, fontWeight:500 }}>${price?.toFixed(2)}</div>
           </div>
@@ -1402,6 +1402,8 @@ function PerformanceTab() {
 // FIX: Weeks are now rendered in reverse order (latest week first, oldest last)
 // within each month card, so the most recent dates appear at the top.
 function SignalCalendar({ history }) {
+  console.log("SignalCalendar received history:", (history || []).length, "days");
+
   const byMonth = {};
   (history || []).forEach(d => {
     const key = d.date.slice(0, 7);
@@ -1409,7 +1411,9 @@ function SignalCalendar({ history }) {
     byMonth[key][d.date.slice(8, 10)] = d.signal_tier;
   });
 
-  const months = Object.keys(byMonth).sort().reverse().slice(0, 6);
+  console.log("SignalCalendar byMonth keys:", Object.keys(byMonth).length, "months");
+
+  const months = Object.keys(byMonth).sort().reverse().slice(0, 12);
   const DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const sigColors = { LOW:"#EAB308", MEDIUM:"#F97316", HIGH:"#EF4444", EXTREME:"#8B5CF6" };
 
@@ -1861,8 +1865,12 @@ export default function App() {
   const [globalSignal, setGlobalSignal] = useState(null);
 
   useEffect(() => {
-    api("/signal/history?days=180")
-      .then(d => setHistoryData((d.history || []).map(h => ({ ...h, signal_tier: h.signal_tier === "WATCH" ? "LOW" : (h.signal_tier || "NONE") }))))
+    api("/signal/history?days=365")
+      .then(d => {
+        const history = (d.history || []).map(h => ({ ...h, signal_tier: h.signal_tier === "WATCH" ? "LOW" : (h.signal_tier || "NONE") }));
+        console.log("History data loaded:", history.length, "days");
+        setHistoryData(history);
+      })
       .catch(() => {});
     // Fetch global signal for header
     api("/signal/today")
