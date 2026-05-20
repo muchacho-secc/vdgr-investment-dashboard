@@ -1245,17 +1245,17 @@ function PerformanceTab() {
   const [perf, setPerf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [historyData, setHistoryData] = useState([]);
+  const [dailyPrices, setDailyPrices] = useState([]);
 
   async function loadPerf() {
     setLoading(true); setError(null);
     try {
-      const [perfData, history] = await Promise.all([
+      const [perfData, chartData] = await Promise.all([
         api("/performance"),
-        api("/signal/history?days=365"),
+        api("/signal/chart?range=1y"),
       ]);
       setPerf(perfData);
-      setHistoryData(history.history || []);
+      setDailyPrices(chartData.chartData || []);
     }
     catch { setError("Unable to load performance data."); }
     setLoading(false);
@@ -1278,63 +1278,71 @@ function PerformanceTab() {
 
   // Build daily time series for portfolio growth chart
   const buildDailyTimeSeries = () => {
-    if (!ledger || ledger.length === 0) return [];
+    if (!ledger || ledger.length === 0 || !dailyPrices || dailyPrices.length === 0) return [];
 
-    // Sort ledger by date
+    // Sort ledger by date ascending
     const sortedLedger = [...ledger].sort((a, b) => new Date(a.date) - new Date(b.date));
-    const firstBuyDate = new Date(sortedLedger[0].date);
-    const today = new Date();
+    const firstBuyDate = sortedLedger[0].date;
 
-    // Create price lookup from signal history
-    const priceByDate = {};
-    (historyData || []).forEach(h => {
-      priceByDate[h.date] = parseFloat(h.vdgr_price);
-    });
+    // Filter signal chart data to dates on or after first buy
+    const filteredPrices = dailyPrices
+      .filter(p => p.date >= firstBuyDate)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    // Build ledger lookup
-    const buysByDate = {};
+    // Create ledger lookup by date
+    const ledgerByDate = {};
     sortedLedger.forEach(e => {
-      if (!buysByDate[e.date]) buysByDate[e.date] = [];
-      buysByDate[e.date].push(e);
+      ledgerByDate[e.date] = e;
     });
 
-    // Generate daily data
-    const dailyData = [];
-    let runningInvested = 0;
+    // Build chart data
+    const chartData = [];
     let runningUnits = 0;
-    let lastKnownPrice = null;
+    let runningInvested = 0;
 
-    for (let d = new Date(firstBuyDate); d <= today; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
+    filteredPrices.forEach(priceData => {
+      const currentDate = priceData.date;
+      const price = parseFloat(priceData.price);
 
-      // Update running totals if there's a buy today
-      if (buysByDate[dateStr]) {
-        buysByDate[dateStr].forEach(e => {
-          runningInvested += parseFloat(e.actual_amount);
-          runningUnits += parseFloat(e.units_acquired);
+      // Calculate running totals up to this date
+      sortedLedger.forEach(entry => {
+        if (entry.date <= currentDate) {
+          // Check if we haven't counted this entry yet
+          const alreadyCounted = chartData.some(d => d.date === entry.date);
+          if (!alreadyCounted || entry.date === currentDate) {
+            // Only add if this is the first time we're seeing this date or if it's today
+            if (entry.date === currentDate && !chartData.some(d => d.date === currentDate)) {
+              runningUnits += parseFloat(entry.units_acquired);
+              runningInvested += parseFloat(entry.actual_amount);
+            }
+          }
+        }
+      });
+
+      // Recalculate running totals properly
+      const unitsUpToDate = sortedLedger
+        .filter(e => e.date <= currentDate)
+        .reduce((sum, e) => sum + parseFloat(e.units_acquired), 0);
+
+      const investedUpToDate = sortedLedger
+        .filter(e => e.date <= currentDate)
+        .reduce((sum, e) => sum + parseFloat(e.actual_amount), 0);
+
+      // Only include if at least one buy has occurred
+      if (unitsUpToDate > 0) {
+        const portfolioValue = unitsUpToDate * price;
+
+        chartData.push({
+          date: currentDate,
+          dateFormatted: new Date(currentDate).toLocaleDateString("en-AU", { day:"2-digit", month:"short" }),
+          portfolio_value: portfolioValue,
+          total_invested: investedUpToDate,
+          isBuyDay: !!ledgerByDate[currentDate],
         });
       }
+    });
 
-      // Get price for today (or forward-fill from last known)
-      const todayPrice = priceByDate[dateStr];
-      if (todayPrice) lastKnownPrice = todayPrice;
-
-      // Calculate portfolio value
-      const portfolioValue = runningUnits * (lastKnownPrice || 0);
-
-      // Only add to chart if we have data
-      if (runningInvested > 0) {
-        dailyData.push({
-          date: dateStr,
-          dateFormatted: d.toLocaleDateString("en-AU", { day:"2-digit", month:"short" }),
-          invested: runningInvested,
-          value: portfolioValue,
-          isBuyDay: !!buysByDate[dateStr],
-        });
-      }
-    }
-
-    return dailyData;
+    return chartData;
   };
 
   const chartData = buildDailyTimeSeries();
@@ -1392,12 +1400,8 @@ function PerformanceTab() {
             <ComposedChart data={chartData}>
               <defs>
                 <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#F0F0F0" stopOpacity={0.15} />
+                  <stop offset="5%" stopColor="#F0F0F0" stopOpacity={0.12} />
                   <stop offset="95%" stopColor="#F0F0F0" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="investedGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#F97316" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#252525" />
@@ -1406,34 +1410,36 @@ function PerformanceTab() {
               <Tooltip
                 contentStyle={{ background:"#1C1C1C", border:"1px solid #252525", borderRadius:8, fontSize:12 }}
                 formatter={(v, name) => {
-                  if (name === "invested") return [fmt.aud(v), "Total Invested"];
-                  if (name === "value") return [fmt.aud(v), "Portfolio Value"];
+                  if (name === "total_invested") return [fmt.aud(v), "Total Invested"];
+                  if (name === "portfolio_value") return [fmt.aud(v), "Portfolio Value"];
                   return [v, name];
                 }}
                 labelFormatter={(label, payload) => {
                   if (!payload || !payload[0]) return label;
                   const data = payload[0].payload;
-                  const profit = data.value - data.invested;
-                  const returnPct = data.invested > 0 ? ((profit / data.invested) * 100).toFixed(1) : "0.0";
+                  const profit = data.portfolio_value - data.total_invested;
+                  const returnPct = data.total_invested > 0 ? ((profit / data.total_invested) * 100).toFixed(1) : "0.0";
                   return `${label} · ${profit >= 0 ? "+" : ""}${fmt.aud(profit)} (${returnPct}%)`;
                 }}
               />
-              {/* Total invested area (orange) */}
-              <Area type="monotone" dataKey="invested" stroke="#F97316" fill="url(#investedGrad)" strokeWidth={2} name="invested" />
-              {/* Portfolio value area (white/black) */}
-              <Area type="monotone" dataKey="value" stroke="#F0F0F0" fill="url(#portfolioGrad)" strokeWidth={2} name="value" />
-              {/* Buy markers - orange diamonds */}
+              {/* Portfolio value area (white) */}
+              <Area type="monotone" dataKey="portfolio_value" stroke="#F0F0F0" fill="url(#portfolioGrad)" strokeWidth={2} name="portfolio_value" />
+              {/* Total invested line (orange, on top) */}
+              <Line type="stepAfter" dataKey="total_invested" stroke="#F97316" strokeWidth={3} dot={false} name="total_invested" />
+              {/* Buy markers - orange circles */}
               <Scatter
                 data={chartData.filter(d => d.isBuyDay)}
                 fill="#F97316"
                 shape={(props) => {
                   const { cx, cy } = props;
                   return (
-                    <path
-                      d={`M ${cx},${cy - 6} L ${cx + 4},${cy} L ${cx},${cy + 6} L ${cx - 4},${cy} Z`}
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={6}
                       fill="#F97316"
                       stroke="#0A0A0A"
-                      strokeWidth={1}
+                      strokeWidth={1.5}
                     />
                   );
                 }}
