@@ -456,6 +456,7 @@ function TodayTab() {
   const [sparklineData, setSparklineData] = useState([]);
   const [sparklineLoading, setSparklineLoading] = useState(true);
   const [marketTab, setMarketTab] = useState("snapshot");
+  const [commentaryExpanded, setCommentaryExpanded] = useState(false);
 
   async function loadData() {
     setLoading(true); setError(null);
@@ -560,6 +561,7 @@ function TodayTab() {
   const drawdown = signal ? Number(signal.drawdown_pct) : null;
   const high52w = signal ? Number(signal.high_52w) : null;
   const isActionable = ["MEDIUM","HIGH","EXTREME"].includes(tier);
+  const isQuiet = ["NONE","LOW"].includes(tier);
   const profitColor = perf ? (perf.returnDollar >= 0 ? C.green : C.red) : C.text.muted;
 
   // Calculate days since last signal
@@ -570,122 +572,207 @@ function TodayTab() {
   return (
     <div className="tab-content fade-in">
 
-      {/* ── COMBINED SIGNAL HERO ── */}
-      <div style={{ marginBottom:4 }}>
-        <div className="card" style={{ padding:"20px 16px", marginBottom:12, border:`1px solid ${isActionable ? signalColor+"40" : "#252525"}`, maxHeight:160 }}>
-          <div style={{ display:"flex", gap:16, alignItems:"center", minHeight:120 }}>
-            {/* Left: Days counter (NONE state only) */}
-            {tier === "NONE" && daysSinceSignal > 0 ? (
-              <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:56, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
-                  {daysSinceSignal}
-                </div>
-                <div style={{ fontSize:11, color:C.text.muted, marginTop:6, textAlign:"center", whiteSpace:"pre-line" }}>
-                  {"days since\nlast signal"}
-                </div>
+      {/* ── STATE-AWARE LAYOUT ── */}
+      {isQuiet ? (
+        /* NONE/LOW STATE: Compact banner, indicators first, collapsed commentary */
+        <>
+          {/* Compact signal banner */}
+          <div style={{
+            display:"flex",
+            alignItems:"center",
+            gap:10,
+            padding:"10px 14px",
+            background:"#141414",
+            border:"1px solid #252525",
+            borderRadius:8,
+            marginBottom:12
+          }}>
+            <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:24, fontWeight:800, color:C.text.muted }}>
+              {daysSinceSignal}
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, color:C.text.secondary }}>
+                {daysSinceSignal === 1 ? "day calm" : "days calm"} · <span style={{ color:signalColor, fontWeight:600 }}>{tier}</span> · No investment today
               </div>
-            ) : (
-              <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:56, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
-                  —
-                </div>
-                <div style={{ fontSize:11, color:C.text.muted, marginTop:6, textAlign:"center" }}>
-                  Signal active
-                </div>
-              </div>
-            )}
-
-            {/* Vertical divider */}
-            <div style={{ width:1, height:100, background:"#252525" }} />
-
-            {/* Right: Signal badge and info */}
-            <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
-              <SignalBadge signal={tier} />
-              {isActionable ? (
-                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18, fontWeight:700, color:signalColor }}>
-                  {fmt.aud(signal.recommended_amount)}
-                </div>
-              ) : (
-                <div style={{ fontSize:13, color:C.text.muted }}>No investment</div>
-              )}
-              <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
+              <div style={{ fontSize:11, color:C.text.muted, marginTop:2 }}>
                 {signal ? fmt.date(signal.date) : "—"}
               </div>
-              {signal?.date && (
-                <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
-                  {getNextUpdate(signal.date)}
+            </div>
+          </div>
+
+          {/* P&L strip */}
+          {perf ? (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:1, background:"#252525", borderRadius:10, overflow:"hidden", marginBottom:12 }}>
+              {[
+                { label:"Invested", value: fmt.aud(perf.totalInvested), color: C.text.primary },
+                { label:"Value", value: perf.currentValue != null ? fmt.aud(perf.currentValue) : "—", color: profitColor },
+                { label:"Return", value: perf.returnPct != null ? `${perf.returnPct>=0?"+":""}${Number(perf.returnPct).toFixed(1)}%` : "—", color: profitColor },
+              ].map(s => (
+                <div key={s.label} style={{ background:"#1C1C1C", padding:"10px 10px" }}>
+                  <div style={{ fontSize:10, color:C.text.muted, marginBottom:3, textTransform:"uppercase", letterSpacing:.6 }}>{s.label}</div>
+                  <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, fontWeight:500, color:s.color }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding:"10px 14px", background:"#141414", borderRadius:10, marginBottom:12, fontSize:12, color:C.text.muted }}>
+              Log your first investment in Ledger to see P&L here
+            </div>
+          )}
+
+          {/* Indicators row - moved up */}
+          {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} />}
+
+          {/* Price & Drawdown summary */}
+          {signal && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+              <div style={{ background:"#141414", border:"1px solid #252525", borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight:700 }}>CURRENT PRICE</div>
+                <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color:C.text.primary, fontWeight:500 }}>${price?.toFixed(2)}</div>
+              </div>
+              <div style={{ background:"#141414", border:`1px solid ${drawdown < -10 ? C.red+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>DRAWDOWN (52W HIGH)</div>
+                <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary, fontWeight:500 }}>{drawdown?.toFixed(1)}%</div>
+              </div>
+            </div>
+          )}
+
+          {/* Analyst commentary - collapsed by default */}
+          {signal?.analyst_summary && (
+            <div className="card" style={{ marginBottom:12 }}>
+              <div style={{
+                fontSize:14,
+                color:C.text.secondary,
+                lineHeight:1.6,
+                maxHeight: commentaryExpanded ? "none" : "4.8em",
+                overflow: commentaryExpanded ? "visible" : "hidden",
+                position:"relative"
+              }}>
+                {signal.analyst_summary}
+              </div>
+              <button
+                onClick={() => setCommentaryExpanded(!commentaryExpanded)}
+                style={{
+                  marginTop:8,
+                  padding:"6px 12px",
+                  background:"transparent",
+                  border:"1px solid #252525",
+                  borderRadius:6,
+                  color:C.text.muted,
+                  fontSize:12,
+                  cursor:"pointer",
+                  width:"100%"
+                }}
+              >
+                {commentaryExpanded ? "Read less" : "Read more"}
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        /* MEDIUM/HIGH/EXTREME STATE: Keep prominent hero, indicators moved up, commentary expanded */
+        <>
+          {/* Large signal hero - kept prominent */}
+          <div style={{ marginBottom:4 }}>
+            <div className="card" style={{ padding:"20px 16px", marginBottom:12, border:`1px solid ${signalColor+"40"}`, maxHeight:160 }}>
+              <div style={{ display:"flex", gap:16, alignItems:"center", minHeight:120 }}>
+                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                  <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:56, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
+                    —
+                  </div>
+                  <div style={{ fontSize:11, color:C.text.muted, marginTop:6, textAlign:"center" }}>
+                    Signal active
+                  </div>
+                </div>
+
+                <div style={{ width:1, height:100, background:"#252525" }} />
+
+                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
+                  <SignalBadge signal={tier} />
+                  <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18, fontWeight:700, color:signalColor }}>
+                    {fmt.aud(signal.recommended_amount)}
+                  </div>
+                  <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
+                    {signal ? fmt.date(signal.date) : "—"}
+                  </div>
+                  {signal?.date && (
+                    <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
+                      {getNextUpdate(signal.date)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* P&L strip */}
+            {perf ? (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:1, background:"#252525", borderRadius:10, overflow:"hidden", marginBottom:12 }}>
+                {[
+                  { label:"Invested", value: fmt.aud(perf.totalInvested), color: C.text.primary },
+                  { label:"Value", value: perf.currentValue != null ? fmt.aud(perf.currentValue) : "—", color: profitColor },
+                  { label:"Return", value: perf.returnPct != null ? `${perf.returnPct>=0?"+":""}${Number(perf.returnPct).toFixed(1)}%` : "—", color: profitColor },
+                ].map(s => (
+                  <div key={s.label} style={{ background:"#1C1C1C", padding:"10px 10px" }}>
+                    <div style={{ fontSize:10, color:C.text.muted, marginBottom:3, textTransform:"uppercase", letterSpacing:.6 }}>{s.label}</div>
+                    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, fontWeight:500, color:s.color }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding:"10px 14px", background:"#141414", borderRadius:10, marginBottom:12, fontSize:12, color:C.text.muted }}>
+                Log your first investment in Ledger to see P&L here
+              </div>
+            )}
+          </div>
+
+          {/* Indicators row - moved up */}
+          {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} />}
+
+          {/* Price & Drawdown summary */}
+          {signal && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+              <div style={{ background:"#141414", border:"1px solid #252525", borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight:700 }}>CURRENT PRICE</div>
+                <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color:C.text.primary, fontWeight:500 }}>${price?.toFixed(2)}</div>
+              </div>
+              <div style={{ background:"#141414", border:`1px solid ${drawdown < -10 ? C.red+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>DRAWDOWN (52W HIGH)</div>
+                <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary, fontWeight:500 }}>{drawdown?.toFixed(1)}%</div>
+              </div>
+            </div>
+          )}
+
+          {/* Analyst commentary - fully expanded */}
+          {signal?.analyst_summary && (
+            <div className="card" style={{ marginBottom:12 }}>
+              <SectionLabel>Analyst Commentary</SectionLabel>
+              <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.6 }}>
+                {signal.analyst_summary}
+              </div>
+            </div>
+          )}
+
+          {/* Tabbed Market Insights */}
+          {signal && (
+            <div className="card">
+              <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+                <button className={`pill-btn ${marketTab==="snapshot"?"active":""}`} onClick={() => setMarketTab("snapshot")}>Market Snapshot</button>
+                <button className={`pill-btn ${marketTab==="analysis"?"active":""}`} onClick={() => setMarketTab("analysis")}>Analysis</button>
+              </div>
+
+              {marketTab === "snapshot" ? (
+                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                  <DrawdownBands price={price} high52w={high52w} noCard />
+                </div>
+              ) : (
+                <div>
+                  <SectionLabel>Extended Analysis</SectionLabel>
+                  <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.6 }}>Additional market context and detailed breakdown of today's signal triggers.</div>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Analyst summary excerpt */}
-        {signal?.analyst_summary && (
-          <div style={{ fontSize:13, color:C.text.secondary, lineHeight:1.6, marginBottom:12, padding:"0 4px" }}>
-            {signal.analyst_summary}
-          </div>
-        )}
-
-        {/* P&L strip — always visible */}
-        {perf ? (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:1, background:"#252525", borderRadius:10, overflow:"hidden", marginBottom:12 }}>
-            {[
-              { label:"Invested", value: fmt.aud(perf.totalInvested), color: C.text.primary },
-              { label:"Value", value: perf.currentValue != null ? fmt.aud(perf.currentValue) : "—", color: profitColor },
-              { label:"Return", value: perf.returnPct != null ? `${perf.returnPct>=0?"+":""}${Number(perf.returnPct).toFixed(1)}%` : "—", color: profitColor },
-            ].map(s => (
-              <div key={s.label} style={{ background:"#1C1C1C", padding:"10px 10px" }}>
-                <div style={{ fontSize:10, color:C.text.muted, marginBottom:3, textTransform:"uppercase", letterSpacing:.6 }}>{s.label}</div>
-                <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, fontWeight:500, color:s.color }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ padding:"10px 14px", background:"#141414", borderRadius:10, marginBottom:12, fontSize:12, color:C.text.muted }}>
-            Log your first investment in Ledger to see P&L here
-          </div>
-        )}
-      </div>
-
-      {/* ── SIGNAL JOURNEY ── */}
-      {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} />}
-
-      {/* ── PRICE & DRAWDOWN SUMMARY ── */}
-      {signal && (
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-          <div style={{ background:"#141414", border:"1px solid #252525", borderRadius:8, padding:"10px 12px" }}>
-            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8, fontWeight:700 }}>CURRENT PRICE</div>
-            <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color:C.text.primary, fontWeight:500 }}>${price?.toFixed(2)}</div>
-          </div>
-          <div style={{ background:"#141414", border:`1px solid ${drawdown < -10 ? C.red+"30" : "#252525"}`, borderRadius:8, padding:"10px 12px" }}>
-            <div style={{ fontSize:10, color:C.text.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:.8 }}>DRAWDOWN (52W HIGH)</div>
-            <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color: drawdown < -10 ? C.red : drawdown < -5 ? C.signal.MEDIUM : C.text.secondary, fontWeight:500 }}>{drawdown?.toFixed(1)}%</div>
-          </div>
-        </div>
-      )}
-
-
-      {/* ── TABBED MARKET INSIGHTS ── */}
-      {tier !== "NONE" && signal && (
-        <div className="card">
-          <div style={{ display:"flex", gap:6, marginBottom:12 }}>
-            <button className={`pill-btn ${marketTab==="snapshot"?"active":""}`} onClick={() => setMarketTab("snapshot")}>Market Snapshot</button>
-            <button className={`pill-btn ${marketTab==="analysis"?"active":""}`} onClick={() => setMarketTab("analysis")}>Analysis</button>
-          </div>
-
-          {marketTab === "snapshot" ? (
-            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-              {/* DrawdownBands content */}
-              <DrawdownBands price={price} high52w={high52w} noCard />
-            </div>
-          ) : (
-            <div>
-              <SectionLabel>Analyst Commentary</SectionLabel>
-              <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.6 }}>{signal.analyst_summary || "No commentary available."}</div>
-            </div>
           )}
-        </div>
+        </>
       )}
 
       {/* ── CHAT ── */}
@@ -1914,7 +2001,6 @@ function PersistentHeader({ signal }) {
         <div style={{ fontSize:11, color:C.text.muted }}>{dateStr}</div>
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <SignalBadge signal={tier} size="sm" />
         {price && (
           <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:13, color:C.accent }}>${price.toFixed(2)}</div>
         )}
