@@ -167,240 +167,230 @@ function DrawdownBands({ price, high52w, noCard }) {
 }
 
 // ─── SIGNAL JOURNEY ───────────────────────────────────────────────────────────
-function SignalJourney({ rsi, vix, drawdown }) {
+function SignalJourney({ rsi, vix, drawdown, overallTier }) {
   if (!rsi || !vix || drawdown == null) return null;
 
-  const thresholds = {
-    WATCH:   { rsi:50, vix:18, dd:-5 },
-    MEDIUM:  { rsi:45, vix:20, dd:-10 },
-    HIGH:    { rsi:35, vix:25, dd:-15 },
-    EXTREME: { rsi:30, vix:30, dd:-20 },
-  };
-
-  // Helper to calculate distance text for an indicator
-  function getDistanceText(value, metThresholds, type) {
-    const levels = ["WATCH", "MEDIUM", "HIGH", "EXTREME"];
-    const metLevels = [];
-    const unmetLevels = [];
-
-    for (const level of levels) {
-      if (metThresholds.includes(level)) {
-        metLevels.push(level);
-      } else {
-        unmetLevels.push(level);
-      }
+  // Calculate current tier for each indicator
+  function getCurrentTier(indicator, value) {
+    if (indicator === "rsi") {
+      if (value < 30) return "EXTREME";
+      if (value < 35) return "HIGH";
+      if (value < 45) return "MEDIUM";
+      if (value < 50) return "WATCH";
+      return "NONE";
     }
-
-    if (unmetLevels.length === 0) {
-      // All met - show the highest met level
-      const highestMet = metLevels[metLevels.length - 1];
-      return { text: `✓ ${highestMet} met`, color: C.signal[highestMet] };
+    if (indicator === "vix") {
+      if (value > 30) return "EXTREME";
+      if (value > 25) return "HIGH";
+      if (value > 20) return "MEDIUM";
+      if (value > 18) return "WATCH";
+      return "NONE";
     }
-
-    // Show distance to next unmet level
-    const nextLevel = unmetLevels[0];
-    const nextThreshold = thresholds[nextLevel];
-    let dist;
-    if (type === "rsi") dist = (value - nextThreshold.rsi).toFixed(1);
-    else if (type === "vix") dist = (nextThreshold.vix - value).toFixed(1);
-    else if (type === "dd") dist = (Math.abs(value) - Math.abs(nextThreshold.dd)).toFixed(1);
-
-    return { text: `${dist} to ${nextLevel}`, color: C.signal[nextLevel] };
+    if (indicator === "drawdown") {
+      if (value < -15) return "HIGH";
+      if (value < -10) return "MEDIUM";
+      if (value < -5) return "WATCH";
+      return "NONE";
+    }
+    return "NONE";
   }
 
-  // RSI segments (70-50 NONE, 50-45 LOW, 45-35 MEDIUM, 35-30 HIGH, 30-25 EXTREME)
-  const rsiMin = 25, rsiMax = 70;
-  const rsiSegments = [
-    { start:70, end:50, color:C.signal.NONE, tier:"NONE" },
-    { start:50, end:45, color:C.signal.LOW, tier:"WATCH" },
-    { start:45, end:35, color:C.signal.MEDIUM, tier:"MEDIUM" },
-    { start:35, end:30, color:C.signal.HIGH, tier:"HIGH" },
-    { start:30, end:25, color:C.signal.EXTREME, tier:"EXTREME" },
-  ];
-  const rsiPos = ((rsiMax - rsi) / (rsiMax - rsiMin)) * 100;
-  const rsiMetThresholds = [];
-  if (rsi < 50) rsiMetThresholds.push("WATCH");
-  if (rsi < 45) rsiMetThresholds.push("MEDIUM");
-  if (rsi < 35) rsiMetThresholds.push("HIGH");
-  if (rsi < 30) rsiMetThresholds.push("EXTREME");
-  const rsiDistance = getDistanceText(rsi, rsiMetThresholds, "rsi");
+  // Calculate distance to next tier
+  function getDistanceToNext(indicator, value, currentTier) {
+    if (indicator === "rsi") {
+      if (currentTier === "NONE") return { text: `${(value - 50).toFixed(1)} lower for WATCH`, nextTier: "WATCH" };
+      if (currentTier === "WATCH") return { text: `${(value - 45).toFixed(1)} lower for MEDIUM`, nextTier: "MEDIUM" };
+      if (currentTier === "MEDIUM") return { text: `${(value - 35).toFixed(1)} lower for HIGH`, nextTier: "HIGH" };
+      if (currentTier === "HIGH") return { text: `${(value - 30).toFixed(1)} lower for EXTREME`, nextTier: "EXTREME" };
+      return { text: "Top tier reached", nextTier: null };
+    }
+    if (indicator === "vix") {
+      if (currentTier === "NONE") return { text: `${(18 - value).toFixed(1)} higher for WATCH`, nextTier: "WATCH" };
+      if (currentTier === "WATCH") return { text: `${(20 - value).toFixed(1)} higher for MEDIUM`, nextTier: "MEDIUM" };
+      if (currentTier === "MEDIUM") return { text: `${(25 - value).toFixed(1)} higher for HIGH`, nextTier: "HIGH" };
+      if (currentTier === "HIGH") return { text: `${(30 - value).toFixed(1)} higher for EXTREME`, nextTier: "EXTREME" };
+      return { text: "Top tier reached", nextTier: null };
+    }
+    if (indicator === "drawdown") {
+      if (currentTier === "NONE") return { text: `${(Math.abs(value) - 5).toFixed(1)}% deeper for WATCH`, nextTier: "WATCH" };
+      if (currentTier === "WATCH") return { text: `${(Math.abs(value) - 10).toFixed(1)}% deeper for MEDIUM`, nextTier: "MEDIUM" };
+      if (currentTier === "MEDIUM") return { text: `${(Math.abs(value) - 15).toFixed(1)}% deeper for HIGH`, nextTier: "HIGH" };
+      return { text: "Guide threshold reached", nextTier: null };
+    }
+    return { text: "", nextTier: null };
+  }
 
-  // VIX segments (10-18 NONE, 18-20 LOW, 20-25 MEDIUM, 25-30 HIGH, 30-35 EXTREME)
-  const vixMin = 10, vixMax = 35;
-  const vixSegments = [
-    { start:10, end:18, color:C.signal.NONE, tier:"NONE" },
-    { start:18, end:20, color:C.signal.LOW, tier:"WATCH" },
-    { start:20, end:25, color:C.signal.MEDIUM, tier:"MEDIUM" },
-    { start:25, end:30, color:C.signal.HIGH, tier:"HIGH" },
-    { start:30, end:35, color:C.signal.EXTREME, tier:"EXTREME" },
-  ];
-  const vixPos = ((vix - vixMin) / (vixMax - vixMin)) * 100;
-  const vixMetThresholds = [];
-  if (vix > 18) vixMetThresholds.push("WATCH");
-  if (vix > 20) vixMetThresholds.push("MEDIUM");
-  if (vix > 25) vixMetThresholds.push("HIGH");
-  if (vix > 30) vixMetThresholds.push("EXTREME");
-  const vixDistance = getDistanceText(vix, vixMetThresholds, "vix");
+  const rsiTier = getCurrentTier("rsi", rsi);
+  const vixTier = getCurrentTier("vix", vix);
+  const ddTier = getCurrentTier("drawdown", drawdown);
 
-  // Drawdown segments (0 to -5 NONE, -5 to -10 LOW, -10 to -15 MEDIUM, -15 to -20 HIGH)
-  const ddMin = 0, ddMax = -20;
-  const ddSegments = [
-    { start:0, end:-5, color:C.signal.NONE, tier:"NONE" },
-    { start:-5, end:-10, color:C.signal.LOW, tier:"WATCH" },
-    { start:-10, end:-15, color:C.signal.MEDIUM, tier:"MEDIUM" },
-    { start:-15, end:-20, color:C.signal.HIGH, tier:"HIGH" },
-  ];
-  const ddPos = ((drawdown - ddMin) / (ddMax - ddMin)) * 100;
-  const ddMetThresholds = [];
-  if (drawdown < -5) ddMetThresholds.push("WATCH");
-  if (drawdown < -10) ddMetThresholds.push("MEDIUM");
-  if (drawdown < -15) ddMetThresholds.push("HIGH");
-  const ddDistance = getDistanceText(drawdown, ddMetThresholds, "dd");
+  const rsiDistance = getDistanceToNext("rsi", rsi, rsiTier);
+  const vixDistance = getDistanceToNext("vix", vix, vixTier);
+  const ddDistance = getDistanceToNext("drawdown", drawdown, ddTier);
 
-  // Value colors based on current tier
-  let rsiValueColor = C.text.primary;
-  if (rsi < 30) rsiValueColor = C.signal.EXTREME;
-  else if (rsi < 35) rsiValueColor = C.signal.HIGH;
-  else if (rsi < 45) rsiValueColor = C.signal.MEDIUM;
-  else if (rsi < 50) rsiValueColor = C.signal.LOW;
+  // Determine what's limiting the overall signal
+  function getLimitingFactor() {
+    const overall = normaliseTier(overallTier);
+    if (overall === "NONE") return null;
 
-  let vixValueColor = C.text.primary;
-  if (vix > 30) vixValueColor = C.signal.EXTREME;
-  else if (vix > 25) vixValueColor = C.signal.HIGH;
-  else if (vix > 20) vixValueColor = C.signal.MEDIUM;
-  else if (vix > 18) vixValueColor = C.signal.LOW;
+    // The overall signal needs BOTH RSI and VIX to qualify
+    const tierRank = { "NONE": 0, "WATCH": 1, "MEDIUM": 2, "HIGH": 3, "EXTREME": 4 };
+    const overallRank = tierRank[overall] || 0;
+    const rsiRank = tierRank[rsiTier] || 0;
+    const vixRank = tierRank[vixTier] || 0;
 
-  let ddValueColor = C.text.primary;
-  if (drawdown <= -15) ddValueColor = C.signal.HIGH;
-  else if (drawdown <= -10) ddValueColor = C.signal.MEDIUM;
-  else if (drawdown <= -5) ddValueColor = C.signal.LOW;
+    if (rsiRank < overallRank + 1) return "RSI";
+    if (vixRank < overallRank + 1) return "VIX";
+    return null;
+  }
 
-  // Render segmented bar
-  function SegmentedBar({ segments, position, min, max }) {
-    const totalRange = Math.abs(max - min);
+  const limitingFactor = getLimitingFactor();
+
+  // Render tier pill
+  function TierPill({ tier }) {
+    const color = tier === "NONE" ? "#4B5563" : C.signal[tier];
+    const isNone = tier === "NONE";
     return (
-      <div style={{ position:"relative", height:6 }}>
-        <div style={{ display:"flex", width:"100%", height:"100%", overflow:"hidden" }}>
+      <div style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "4px 12px",
+        borderRadius: 999,
+        background: isNone ? "transparent" : color,
+        border: `2px solid ${color}`,
+      }}>
+        <span style={{
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: 13,
+          fontWeight: 800,
+          letterSpacing: 1.5,
+          color: isNone ? color : "#0A0A0A",
+        }}>
+          {tier}
+        </span>
+      </div>
+    );
+  }
+
+  // Render segmented bar with equal-width segments
+  function SegmentedBar({ indicator, value, currentTier }) {
+    let segments, thresholds;
+
+    if (indicator === "rsi") {
+      segments = ["NONE", "WATCH", "MEDIUM", "HIGH", "EXTREME"];
+      thresholds = [50, 45, 35, 30];
+    } else if (indicator === "vix") {
+      segments = ["NONE", "WATCH", "MEDIUM", "HIGH", "EXTREME"];
+      thresholds = [18, 20, 25, 30];
+    } else {
+      segments = ["NONE", "WATCH", "MEDIUM", "HIGH"];
+      thresholds = [-5, -10, -15];
+    }
+
+    return (
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ display: "flex", gap: 1, marginBottom: 6 }}>
           {segments.map((seg, i) => {
-            const segWidth = (Math.abs(seg.end - seg.start) / totalRange) * 100;
-            const isFirst = i === 0;
-            const isLast = i === segments.length - 1;
+            const isActive = seg === currentTier;
+            const color = seg === "NONE" ? "#4B5563" : C.signal[seg];
             return (
-              <div key={i} style={{
-                width:`${segWidth}%`,
-                height:"100%",
-                background:seg.color,
-                borderTopLeftRadius: isFirst ? 999 : 0,
-                borderBottomLeftRadius: isFirst ? 999 : 0,
-                borderTopRightRadius: isLast ? 999 : 0,
-                borderBottomRightRadius: isLast ? 999 : 0,
-              }} />
+              <div
+                key={seg}
+                style={{
+                  flex: 1,
+                  height: isActive ? 10 : 6,
+                  background: color,
+                  opacity: isActive ? 1 : 0.22,
+                  borderRadius: 2,
+                  transition: "all 0.2s",
+                }}
+              />
             );
           })}
         </div>
-        {/* White indicator line */}
-        <div style={{
-          position:"absolute",
-          left:`${Math.min(100, Math.max(0, position))}%`,
-          top:-4,
-          width:2,
-          height:14,
-          background:"#F0F0F0",
-          borderRadius:1,
-          transform:"translateX(-50%)",
-          pointerEvents:"none"
-        }} />
+        {/* Threshold labels */}
+        <div style={{ display: "flex", justifyContent: "space-around", position: "relative" }}>
+          {thresholds.map((t, i) => (
+            <div key={t} style={{ fontSize: 9, color: "#6B7280", textAlign: "center" }}>
+              {indicator === "rsi" ? `<${t}` : indicator === "vix" ? `>${t}` : `<${t}%`}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Render indicator row
+  function IndicatorRow({ label, value, tier, distance, indicator, isGuideOnly }) {
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div style={{ fontSize: 11, color: C.text.muted, textTransform: "uppercase", letterSpacing: 0.8 }}>
+              {label}
+              {isGuideOnly && <span style={{ fontSize: 9, marginLeft: 6, color: "#6B7280" }}>(guide only)</span>}
+            </div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 26, color: "#F0F0F0", fontWeight: 500 }}>
+              {value}
+            </div>
+          </div>
+          <TierPill tier={tier} />
+        </div>
+        <SegmentedBar indicator={indicator} value={parseFloat(value)} currentTier={tier} />
+        <div style={{ fontSize: 11, color: "#6B7280", marginTop: 4 }}>
+          {distance.text.split(" ").map((word, i) => {
+            const isNextTier = distance.nextTier && word === distance.nextTier;
+            return (
+              <span key={i} style={{ color: isNextTier ? "#9CA3AF" : "#6B7280" }}>
+                {word}{" "}
+              </span>
+            );
+          })}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="card" style={{ marginBottom:12 }}>
+    <div className="card" style={{ marginBottom: 12 }}>
       <SectionLabel>Signal Indicators</SectionLabel>
 
-      {/* RSI Row */}
-      <div style={{ marginBottom:16 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ minWidth:70 }}>
-            <div style={{ fontSize:12, color:C.text.muted }}>RSI</div>
-            <div style={{ fontSize:18, fontWeight:600, color:rsiValueColor, fontFamily:"'JetBrains Mono',monospace" }}>{rsi.toFixed(1)}</div>
+      {/* Overall summary */}
+      {overallTier && (
+        <div style={{ marginBottom: 16, padding: "10px 12px", background: "#141414", borderRadius: 8 }}>
+          <div style={{ fontSize: 13, color: C.text.secondary }}>
+            Overall: <span style={{ fontWeight: 600, color: C.signal[normaliseTier(overallTier)] }}>{normaliseTier(overallTier)}</span>
+            {limitingFactor && (
+              <span style={{ color: C.text.muted }}> (limited by {limitingFactor})</span>
+            )}
           </div>
-          <div style={{ flex:1 }}>
-            <SegmentedBar segments={rsiSegments} position={rsiPos} min={rsiMin} max={rsiMax} />
-            <div style={{ position:"relative", height:14, marginTop:2 }}>
-              {[50, 45, 35, 30].map(threshold => {
-                const pos = ((rsiMax - threshold) / (rsiMax - rsiMin)) * 100;
-                return (
-                  <div key={threshold} style={{
-                    position:"absolute",
-                    left:`${pos}%`,
-                    transform:"translateX(-50%)",
-                    fontSize:9,
-                    color:C.text.muted
-                  }}>{threshold}</div>
-                );
-              })}
-            </div>
-          </div>
-          <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:rsiDistance.color }}>{rsiDistance.text}</div>
         </div>
-      </div>
+      )}
 
-      {/* VIX Row */}
-      <div style={{ marginBottom:16 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ minWidth:70 }}>
-            <div style={{ fontSize:12, color:C.text.muted }}>VIX</div>
-            <div style={{ fontSize:18, fontWeight:600, color:vixValueColor, fontFamily:"'JetBrains Mono',monospace" }}>{vix.toFixed(1)}</div>
-          </div>
-          <div style={{ flex:1 }}>
-            <SegmentedBar segments={vixSegments} position={vixPos} min={vixMin} max={vixMax} />
-            <div style={{ position:"relative", height:14, marginTop:2 }}>
-              {[18, 20, 25, 30].map(threshold => {
-                const pos = ((threshold - vixMin) / (vixMax - vixMin)) * 100;
-                return (
-                  <div key={threshold} style={{
-                    position:"absolute",
-                    left:`${pos}%`,
-                    transform:"translateX(-50%)",
-                    fontSize:9,
-                    color:C.text.muted
-                  }}>{threshold}</div>
-                );
-              })}
-            </div>
-          </div>
-          <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:vixDistance.color }}>{vixDistance.text}</div>
-        </div>
-      </div>
+      <IndicatorRow
+        label="RSI"
+        value={rsi.toFixed(1)}
+        tier={rsiTier}
+        distance={rsiDistance}
+        indicator="rsi"
+      />
 
-      {/* Drawdown Row */}
-      <div>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ minWidth:70 }}>
-            <div style={{ fontSize:12, color:C.text.muted }}>DRAWDOWN</div>
-            <div style={{ fontSize:18, fontWeight:600, color:ddValueColor, fontFamily:"'JetBrains Mono',monospace" }}>{drawdown.toFixed(1)}%</div>
-          </div>
-          <div style={{ flex:1 }}>
-            <SegmentedBar segments={ddSegments} position={ddPos} min={ddMin} max={ddMax} />
-            <div style={{ position:"relative", height:14, marginTop:2, marginBottom:6 }}>
-              {[-5, -10, -15].map(threshold => {
-                const pos = ((threshold - ddMin) / (ddMax - ddMin)) * 100;
-                return (
-                  <div key={threshold} style={{
-                    position:"absolute",
-                    left:`${pos}%`,
-                    transform:"translateX(-50%)",
-                    fontSize:9,
-                    color:C.text.muted
-                  }}>{threshold}%</div>
-                );
-              })}
-            </div>
-          </div>
-          <div style={{ minWidth:90, textAlign:"right", fontSize:11, color:ddDistance.color }}>{ddDistance.text}</div>
-        </div>
-      </div>
+      <IndicatorRow
+        label="VIX"
+        value={vix.toFixed(1)}
+        tier={vixTier}
+        distance={vixDistance}
+        indicator="vix"
+      />
+
+      <IndicatorRow
+        label="Drawdown"
+        value={`${drawdown.toFixed(1)}%`}
+        tier={ddTier}
+        distance={ddDistance}
+        indicator="drawdown"
+        isGuideOnly={true}
+      />
     </div>
   );
 }
@@ -621,7 +611,7 @@ function TodayTab() {
           )}
 
           {/* Indicators row - moved up */}
-          {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} />}
+          {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} overallTier={signal.signal_tier} />}
 
           {/* Price & Drawdown summary */}
           {signal && (
@@ -726,7 +716,7 @@ function TodayTab() {
           </div>
 
           {/* Indicators row - moved up */}
-          {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} />}
+          {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} overallTier={signal.signal_tier} />}
 
           {/* Price & Drawdown summary */}
           {signal && (
