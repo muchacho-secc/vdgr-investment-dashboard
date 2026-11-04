@@ -297,40 +297,67 @@ function SignalJourney({ rsi, vix, drawdown, overallTier }) {
     function getMarkerPosition() {
       let segmentIndex = 0;
       let fraction = 0;
+      let found = false;
+
+      // Determine if this is an ascending (VIX) or descending (RSI, drawdown) indicator
+      const isAscending = indicator === "vix";
 
       // Find which segment the value is in
       for (let i = 0; i < segmentBounds.length; i++) {
-        const [bound1, bound2] = segmentBounds[i];
-        const segMin = Math.min(bound1, bound2);
-        const segMax = Math.max(bound1, bound2);
+        const [start, end] = segmentBounds[i];
 
-        if (value >= segMin && value <= segMax) {
+        // Check if value falls in this segment
+        let inSegment = false;
+        if (isAscending) {
+          // Ascending: value >= start and < end (or <= end for last segment)
+          inSegment = i === segmentBounds.length - 1
+            ? (value >= start && value <= end)
+            : (value >= start && value < end);
+        } else {
+          // Descending: value <= start and > end (or >= end for last segment)
+          inSegment = i === segmentBounds.length - 1
+            ? (value <= start && value >= end)
+            : (value <= start && value > end);
+        }
+
+        if (inSegment) {
           segmentIndex = i;
-          // Calculate fraction within this segment
-          if (indicator === "rsi" || indicator === "drawdown") {
-            // Value falls as you move right
-            fraction = (bound1 - value) / (bound1 - bound2);
-          } else {
-            // VIX: value rises as you move right
-            fraction = (value - bound1) / (bound2 - bound1);
-          }
-          break;
-        }
-        // Handle out-of-bounds cases
-        if (i === 0 && value > segMax) {
-          segmentIndex = 0;
-          fraction = 0;
-          break;
-        }
-        if (i === segmentBounds.length - 1 && value < segMin) {
-          segmentIndex = segmentBounds.length - 1;
-          fraction = 1;
+          // fraction = (value - start) / (end - start)
+          fraction = (value - start) / (end - start);
+          // Clamp fraction to 0-1
+          fraction = Math.max(0, Math.min(1, fraction));
+          found = true;
           break;
         }
       }
 
-      // Calculate position as percentage
+      // Handle out-of-bounds: if not found, check if before first or after last
+      if (!found) {
+        const firstBounds = segmentBounds[0];
+        const lastBounds = segmentBounds[segmentBounds.length - 1];
+
+        if (isAscending) {
+          if (value < firstBounds[0]) {
+            segmentIndex = 0;
+            fraction = 0;
+          } else if (value > lastBounds[1]) {
+            segmentIndex = segmentBounds.length - 1;
+            fraction = 1;
+          }
+        } else {
+          if (value > firstBounds[0]) {
+            segmentIndex = 0;
+            fraction = 0;
+          } else if (value < lastBounds[1]) {
+            segmentIndex = segmentBounds.length - 1;
+            fraction = 1;
+          }
+        }
+      }
+
+      // Calculate position as percentage: (segmentIndex + fraction) / numberOfSegments * 100
       const position = ((segmentIndex + fraction) / segments.length) * 100;
+      // Clamp to 0-100
       return Math.max(0, Math.min(100, position));
     }
 
