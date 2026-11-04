@@ -234,13 +234,13 @@ function SignalJourney({ rsi, vix, drawdown, overallTier }) {
     if (overall === "NONE") return null;
 
     // The overall signal needs BOTH RSI and VIX to qualify
+    // The limiting indicator is the one with the lower tier
     const tierRank = { "NONE": 0, "WATCH": 1, "MEDIUM": 2, "HIGH": 3, "EXTREME": 4 };
-    const overallRank = tierRank[overall] || 0;
     const rsiRank = tierRank[rsiTier] || 0;
     const vixRank = tierRank[vixTier] || 0;
 
-    if (rsiRank < overallRank + 1) return "RSI";
-    if (vixRank < overallRank + 1) return "VIX";
+    if (rsiRank < vixRank) return "RSI";
+    if (vixRank < rsiRank) return "VIX";
     return null;
   }
 
@@ -274,22 +274,71 @@ function SignalJourney({ rsi, vix, drawdown, overallTier }) {
 
   // Render segmented bar with equal-width segments
   function SegmentedBar({ indicator, value, currentTier }) {
-    let segments, thresholds;
+    let segments, thresholds, segmentBounds;
 
     if (indicator === "rsi") {
       segments = ["NONE", "WATCH", "MEDIUM", "HIGH", "EXTREME"];
       thresholds = [50, 45, 35, 30];
+      // Segment boundaries: [high, low] for each segment (value falls as you move right)
+      segmentBounds = [[70, 50], [50, 45], [45, 35], [35, 30], [30, 20]];
     } else if (indicator === "vix") {
       segments = ["NONE", "WATCH", "MEDIUM", "HIGH", "EXTREME"];
       thresholds = [18, 20, 25, 30];
+      // Segment boundaries: [low, high] for each segment (value rises as you move right)
+      segmentBounds = [[10, 18], [18, 20], [20, 25], [25, 30], [30, 40]];
     } else {
       segments = ["NONE", "WATCH", "MEDIUM", "HIGH"];
       thresholds = [-5, -10, -15];
+      // Segment boundaries: [high, low] for each segment (value falls as you move right)
+      segmentBounds = [[0, -5], [-5, -10], [-10, -15], [-15, -20]];
     }
+
+    // Calculate marker position piecewise
+    function getMarkerPosition() {
+      let segmentIndex = 0;
+      let fraction = 0;
+
+      // Find which segment the value is in
+      for (let i = 0; i < segmentBounds.length; i++) {
+        const [bound1, bound2] = segmentBounds[i];
+        const segMin = Math.min(bound1, bound2);
+        const segMax = Math.max(bound1, bound2);
+
+        if (value >= segMin && value <= segMax) {
+          segmentIndex = i;
+          // Calculate fraction within this segment
+          if (indicator === "rsi" || indicator === "drawdown") {
+            // Value falls as you move right
+            fraction = (bound1 - value) / (bound1 - bound2);
+          } else {
+            // VIX: value rises as you move right
+            fraction = (value - bound1) / (bound2 - bound1);
+          }
+          break;
+        }
+        // Handle out-of-bounds cases
+        if (i === 0 && value > segMax) {
+          segmentIndex = 0;
+          fraction = 0;
+          break;
+        }
+        if (i === segmentBounds.length - 1 && value < segMin) {
+          segmentIndex = segmentBounds.length - 1;
+          fraction = 1;
+          break;
+        }
+      }
+
+      // Calculate position as percentage
+      const position = ((segmentIndex + fraction) / segments.length) * 100;
+      return Math.max(0, Math.min(100, position));
+    }
+
+    const markerPosition = getMarkerPosition();
 
     return (
       <div style={{ marginBottom: 4 }}>
-        <div style={{ display: "flex", gap: 1, marginBottom: 6 }}>
+        <div style={{ position: "relative", display: "flex", gap: 1, marginBottom: 6 }}>
           {segments.map((seg, i) => {
             const isActive = seg === currentTier;
             const color = seg === "NONE" ? "#4B5563" : C.signal[seg];
@@ -307,6 +356,21 @@ function SignalJourney({ rsi, vix, drawdown, overallTier }) {
               />
             );
           })}
+          {/* Position marker */}
+          <div
+            style={{
+              position: "absolute",
+              left: `${markerPosition}%`,
+              top: "50%",
+              width: 2,
+              height: 18,
+              background: "#F0F0F0",
+              boxShadow: "0 0 0 1px #0A0A0A",
+              transform: "translate(-50%, -50%)",
+              borderRadius: 1,
+              pointerEvents: "none",
+            }}
+          />
         </div>
         {/* Threshold labels */}
         <div style={{ display: "flex", justifyContent: "space-around", position: "relative" }}>
@@ -330,7 +394,7 @@ function SignalJourney({ rsi, vix, drawdown, overallTier }) {
               {label}
               {isGuideOnly && <span style={{ fontSize: 9, marginLeft: 6, color: "#6B7280" }}>(guide only)</span>}
             </div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 26, color: "#F0F0F0", fontWeight: 500 }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 20, color: "#F0F0F0", fontWeight: 500 }}>
               {value}
             </div>
           </div>
@@ -359,7 +423,9 @@ function SignalJourney({ rsi, vix, drawdown, overallTier }) {
       {overallTier && (
         <div style={{ marginBottom: 16, padding: "10px 12px", background: "#141414", borderRadius: 8 }}>
           <div style={{ fontSize: 13, color: C.text.secondary }}>
-            Overall: <span style={{ fontWeight: 600, color: C.signal[normaliseTier(overallTier)] }}>{normaliseTier(overallTier)}</span>
+            Overall: <span style={{ fontWeight: 600, color: C.signal[normaliseTier(overallTier)] }}>
+              {normaliseTier(overallTier) === "LOW" ? "WATCH" : normaliseTier(overallTier)}
+            </span>
             {limitingFactor && (
               <span style={{ color: C.text.muted }}> (limited by {limitingFactor})</span>
             )}
