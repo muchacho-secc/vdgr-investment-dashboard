@@ -3,6 +3,7 @@
 import { supabaseGet, supabasePostMinimal, supabasePatch } from './supabase.js';
 import { generateAnalystSummary } from './analyst.js';
 import { sendTelegramNotification, sendTelegramError } from './telegram.js';
+import { getLatestSignal } from './signalComputation.js';
 
 // ─── Default Thresholds ───────────────────────────────────────────────────────
 const DEFAULT_THRESHOLDS = [
@@ -131,60 +132,78 @@ async function updatePerformanceSnapshot(env, date, vdgrPrice) {
 
 // ─── Main Daily Signal Runner ─────────────────────────────────────────────────
 export async function runDailySignal(env) {
-  const today = new Date().toISOString().split('T')[0];
-  console.log(`[signal] Starting daily run for ${today}`);
+  console.log(`[signal] Starting daily run`);
 
-  if (await checkExistingSignal(env, today)) {
-    console.log(`[signal] Already exists for ${today}, skipping`);
+  // Load thresholds
+  const thresholdsArray = await loadThresholds(env);
+  const thresholds = {
+    extreme_rsi: thresholdsArray[0].rsiBelow,
+    extreme_vix: thresholdsArray[0].vixAbove,
+    extreme_dd: thresholdsArray[0].drawdownBelow,
+    high_rsi: thresholdsArray[1].rsiBelow,
+    high_vix: thresholdsArray[1].vixAbove,
+    medium_rsi: thresholdsArray[2].rsiBelow,
+    medium_vix: thresholdsArray[2].vixAbove,
+    low_rsi: thresholdsArray[3].rsiBelow,
+    low_vix: thresholdsArray[3].vixAbove,
+  };
+
+  // Get latest signal using shared computation
+  const latest = await getLatestSignal({ thresholds });
+  const { date, price, rsi, vix, drawdown, tier, high52w } = latest;
+
+  console.log(`[signal] Date=${date}, RSI=${rsi}, VIX=${vix}, DD=${drawdown}%, Price=${price}, Tier=${tier}`);
+
+  // Check if signal already exists for this date
+  if (await checkExistingSignal(env, date)) {
+    console.log(`[signal] Already exists for ${date}, skipping`);
     return;
   }
 
-  const thresholds = await loadThresholds(env);
+  // Map tier to recommended amount
+  const tierToAmount = {
+    EXTREME: thresholdsArray[0].amount,
+    HIGH: thresholdsArray[1].amount,
+    MEDIUM: thresholdsArray[2].amount,
+    WATCH: thresholdsArray[3].amount,
+    NONE: 0
+  };
+  const recommendedAmount = tierToAmount[tier] || 0;
 
-  const [vdgrPrices3m, vdgrPrices1y, vix] = await Promise.all([
-    fetchVDGRHistory('3mo'),
-    fetchVDGRHistory('1y'),
-    fetchVIX(),
-  ]);
-
-  const rsi          = calculateRSI(vdgrPrices3m);
-  const currentPrice = vdgrPrices3m[vdgrPrices3m.length - 1].close;
-  const { high52w, drawdownPct } = calculateDrawdown(vdgrPrices1y);
-  const { tier, recommendedAmount } = calculateSignal(rsi, vix, drawdownPct, thresholds);
-
-  console.log(`[signal] RSI=${rsi}, VIX=${vix}, DD=${drawdownPct}%, Price=${currentPrice}, Tier=${tier}`);
+  console.log(`[signal] Recommended amount: $${recommendedAmount}`);
 
   let analystSummary = null;
   try {
     analystSummary = await generateAnalystSummary(env, {
-      date: today, signal_tier: tier, vdgr_price: currentPrice,
-      rsi, vix, drawdown_pct: drawdownPct, recommended_amount: recommendedAmount,
+      date, signal_tier: tier, vdgr_price: price,
+      rsi, vix, drawdown_pct: drawdown, recommended_amount: recommendedAmount,
     });
   } catch (err) {
     console.error('[signal] Analyst summary failed:', err.message);
   }
 
   await storeSignal(env, {
-    date: today, signal_tier: tier, rsi, vix,
-    vdgr_price:         Math.round(currentPrice * 10000) / 10000,
-    drawdown_pct:       drawdownPct,
+    date, signal_tier: tier, rsi, vix,
+    vdgr_price:         price,
+    drawdown_pct:       drawdown,
     high_52w:           high52w,
     recommended_amount: recommendedAmount,
     analyst_summary:    analystSummary,
     notification_sent:  false,
   });
 
-  console.log(`[signal] Stored: ${tier} for ${today}`);
-  await updatePerformanceSnapshot(env, today, currentPrice);
+  console.log(`[signal] Stored: ${tier} for ${date}`);
+  await updatePerformanceSnapshot(env, date, price);
 
+  // Only send Telegram for NEW signals (not if row already existed)
   if (['MEDIUM', 'HIGH', 'EXTREME'].includes(tier)) {
     try {
-      await sendTelegramNotification(env, { tier, recommendedAmount, analystSummary: analystSummary || 'Summary unavailable.', rsi, vix, currentPrice, drawdownPct });
-      await markNotificationSent(env, today);
+      await sendTelegramNotification(env, { tier, recommendedAmount, analystSummary: analystSummary || 'Summary unavailable.', rsi, vix, currentPrice: price, drawdownPct: drawdown });
+      await markNotificationSent(env, date);
     } catch (err) {
       console.error('[signal] Telegram failed:', err.message);
     }
   }
 
-  console.log(`[signal] Complete: ${tier} for ${today}`);
+  console.log(`[signal] Complete: ${tier} for ${date}`);
 }

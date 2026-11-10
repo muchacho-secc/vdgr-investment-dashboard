@@ -13,6 +13,16 @@ const SIGNAL_CTA = {
   EXTREME: 'Open the app to review and log your investment.',
 };
 
+// Strip markdown formatting characters from text
+function stripMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/[*_~`\[\]()]/g, '') // Remove markdown characters
+    .replace(/#{1,6}\s/g, '')     // Remove header markers
+    .replace(/>\s/g, '')          // Remove blockquote markers
+    .trim();
+}
+
 function buildTelegramMessage({ tier, recommendedAmount, analystSummary, rsi, vix, currentPrice, drawdownPct }) {
   const emoji = SIGNAL_EMOJI[tier] || '⚪';
   const amountDisplay = tier === 'EXTREME' ? `$${recommendedAmount}+` : `$${recommendedAmount}`;
@@ -22,14 +32,17 @@ function buildTelegramMessage({ tier, recommendedAmount, analystSummary, rsi, vi
   const vixFormatted = typeof vix === 'number' ? vix.toFixed(1) : vix;
   const ddFormatted  = typeof drawdownPct === 'number' ? drawdownPct.toFixed(1) : '—';
 
+  // Strip markdown from analyst summary
+  const summary = stripMarkdown(analystSummary);
+
   return [
-    `${emoji} *VDGR Signal: ${tier}*`,
+    `${emoji} VDGR Signal: ${tier}`,
     ``,
     `💰 Recommended: ${amountDisplay}`,
     `📊 RSI: ${rsiFormatted} | VIX: ${vixFormatted} | Price: $${priceFormatted}`,
     `📉 Drawdown: ${ddFormatted}%`,
     ``,
-    analystSummary,
+    summary,
     ``,
     cta,
   ].join('\n');
@@ -44,7 +57,7 @@ async function sendMessage(env, text) {
       body: JSON.stringify({
         chat_id: env.TELEGRAM_CHAT_ID,
         text,
-        parse_mode: 'Markdown',
+        // Send as plain text (not markdown) to avoid formatting issues
         disable_web_page_preview: true,
       }),
     }
@@ -61,7 +74,25 @@ async function sendMessage(env, text) {
 // Send a signal notification — only called for MEDIUM, HIGH, EXTREME
 export async function sendTelegramNotification(env, messageData) {
   const text = buildTelegramMessage(messageData);
-  return sendMessage(env, text);
+
+  try {
+    return await sendMessage(env, text);
+  } catch (err) {
+    console.error('[telegram] Failed to send signal notification:', err.message);
+
+    // Fallback: send minimal notification without analyst summary
+    const { tier, recommendedAmount } = messageData;
+    const emoji = SIGNAL_EMOJI[tier] || '⚪';
+    const fallbackText = `${emoji} VDGR Signal: ${tier}\n\n💰 Recommended: $${recommendedAmount}\n\nOpen the app for details.`;
+
+    try {
+      await sendMessage(env, fallbackText);
+      console.log('[telegram] Sent fallback notification');
+    } catch (fallbackErr) {
+      console.error('[telegram] Fallback notification also failed:', fallbackErr.message);
+      throw err; // Throw original error
+    }
+  }
 }
 
 // Send an error alert when signal generation fails

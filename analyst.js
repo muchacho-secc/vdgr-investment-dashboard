@@ -1,6 +1,7 @@
-// analyst.js — Anthropic API proxy. API key never leaves the Worker.
+// analyst.js — AI analyst summary + chat (LangSmith-traced)
 
-import { supabaseGet } from './supabase.js';
+import { supabaseGet, supabasePatch } from './supabase.js';
+import { traceAnthropicCall } from './langsmith.js';
 
 const SYSTEM_PROMPT = `You are a calm, clear investment analyst helping a single user invest consistently into VDGR.AX (VanEck Gold Royalties ETF Australia).
 
@@ -57,28 +58,14 @@ Number of signal investments: ${ledgerSummary.entryCount}
 Most recent investment: ${ledgerSummary.lastEntry || 'None yet'}`;
 }
 
-async function callAnthropic(env, systemPrompt, messages, maxTokens = 400) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages,
-    }),
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
   });
-
-  if (!res.ok) throw new Error(`Anthropic API error: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  return data.content[0].text;
 }
 
-// Called during the daily cron to pre-generate and store the analyst summary
+// Called by the daily cron (signal.js)
 export async function generateAnalystSummary(env, signal) {
   const extremeAddendum = signal.signal_tier === 'EXTREME'
     ? `\n\nThe signal today is EXTREME — the most severe tier. The base recommendation is $800. If RSI is significantly below 30 or VIX is significantly above 30, you may suggest the user consider investing more than $800, framed as an option — not a directive. Mention the specific values that support this. Keep the suggestion brief and calm.`
@@ -90,10 +77,10 @@ Please provide a brief explanation of today's signal for the user.
 Cover: what the RSI and VIX values mean today, why this triggered (or didn't trigger) a signal, and what this suggests about current market conditions.
 Keep it to 3 sentences. Do not suggest action — just explain the conditions.${extremeAddendum}`;
 
-  return callAnthropic(env, SYSTEM_PROMPT, [{ role: 'user', content: prompt }], 300);
+  return traceAnthropicCall(env, 'daily-analyst-summary', SYSTEM_PROMPT, [{ role: 'user', content: prompt }], 300);
 }
 
-// Called from POST /analyst/summary — on-demand regeneration
+// POST /analyst/summary
 export async function handleAnalystSummary(request, env) {
   const { date } = await request.json().catch(() => ({}));
   const targetDate = date || new Date().toISOString().split('T')[0];
@@ -109,21 +96,17 @@ export async function handleAnalystSummary(request, env) {
   }
 
   const signal = signals[0];
-  const totalInvested = ledgerRows.reduce((s, e) => s + parseFloat(e.actual_amount), 0);
-  const lastEntry = ledgerRows[0]?.date || null;
-
   const summary = await generateAnalystSummary(env, {
     ...signal,
     date: targetDate,
   });
 
-  // Persist updated summary
   await supabasePatch(env, 'signals', `?date=eq.${targetDate}`, { analyst_summary: summary });
 
   return json({ summary });
 }
 
-// Called from POST /analyst/chat — multi-turn chat from Today tab
+// POST /analyst/chat
 export async function handleAnalystChat(request, env) {
   const body = await request.json().catch(() => null);
   if (!body?.messages?.length) {
@@ -158,7 +141,7 @@ export async function handleAnalystChat(request, env) {
 
   const contextBlock = buildContext(signal, recentRows, ledgerSummary);
 
-  // Inject context only into the first user message
+  // Inject market context into the first user message only
   const enrichedMessages = messages.map((msg, i) => {
     if (i === 0 && msg.role === 'user') {
       return { ...msg, content: `${contextBlock}\n\n--- USER QUESTION ---\n${msg.content}` };
@@ -166,13 +149,6 @@ export async function handleAnalystChat(request, env) {
     return msg;
   });
 
-  const response = await callAnthropic(env, SYSTEM_PROMPT, enrichedMessages, 500);
+  const response = await traceAnthropicCall(env, 'analyst-chat', SYSTEM_PROMPT, enrichedMessages, 500);
   return json({ response });
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }

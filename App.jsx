@@ -46,6 +46,15 @@ const fmt = {
   mmm:   d => new Date(d).toLocaleDateString("en-AU", { month: "short", year: "2-digit" }),
 };
 
+function stripMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/[*_~`[\]()]/g, '')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/>\s/g, '')
+    .trim();
+}
+
 function buildXTicks(data, maxTicks = 6) {
   if (!data.length) return [];
   const step = Math.max(1, Math.floor(data.length / maxTicks));
@@ -677,8 +686,8 @@ function TodayTab() {
               <div style={{ fontSize:13, color:C.text.secondary }}>
                 {daysSinceSignal === 1 ? "day calm" : "days calm"} · <span style={{ color:signalColor, fontWeight:600 }}>{tier}</span> · No investment today
               </div>
-              <div style={{ fontSize:11, color:C.text.muted, marginTop:2 }}>
-                {signal ? fmt.date(signal.date) : "—"}
+              <div style={{ fontSize:10, color:C.text.muted, marginTop:2 }}>
+                Based on {signal ? fmt.date(signal.date) : "—"} close
               </div>
             </div>
           </div>
@@ -731,7 +740,7 @@ function TodayTab() {
                 overflow: commentaryExpanded ? "visible" : "hidden",
                 position:"relative"
               }}>
-                {signal.analyst_summary}
+                {stripMarkdown(signal.analyst_summary)}
               </div>
               <button
                 onClick={() => setCommentaryExpanded(!commentaryExpanded)}
@@ -770,16 +779,16 @@ function TodayTab() {
 
                 <div style={{ width:1, height:100, background:"#252525" }} />
 
-                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
+                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6 }}>
                   <SignalBadge signal={tier} />
                   <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18, fontWeight:700, color:signalColor }}>
                     {fmt.aud(signal.recommended_amount)}
                   </div>
-                  <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
-                    {signal ? fmt.date(signal.date) : "—"}
+                  <div style={{ fontSize:10, color:C.text.muted, textAlign:"center" }}>
+                    Based on {signal ? fmt.date(signal.date) : "—"} close
                   </div>
                   {signal?.date && (
-                    <div style={{ fontSize:11, color:C.text.muted, textAlign:"center" }}>
+                    <div style={{ fontSize:9, color:C.text.muted, textAlign:"center", maxWidth:"140px", lineHeight:1.3 }}>
                       {getNextUpdate(signal.date)}
                     </div>
                   )}
@@ -830,7 +839,7 @@ function TodayTab() {
             <div className="card" style={{ marginBottom:12 }}>
               <SectionLabel>Analyst Commentary</SectionLabel>
               <div style={{ fontSize:14, color:C.text.secondary, lineHeight:1.6 }}>
-                {signal.analyst_summary}
+                {stripMarkdown(signal.analyst_summary)}
               </div>
             </div>
           )}
@@ -926,7 +935,7 @@ function ChartsTab() {
               <ComposedChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#252525" />
                 <XAxis dataKey="date" tick={{ fill:C.text.muted, fontSize:10 }} ticks={xTicks} tickFormatter={xTickFormatter} interval={0} />
-                <YAxis tick={{ fill:C.text.muted, fontSize:11 }} domain={["auto","auto"]} width={52} tickFormatter={v => `$${Number(v).toFixed(0)}`} />
+                <YAxis tick={{ fill:C.text.muted, fontSize:11 }} domain={["auto","auto"]} width={52} tickFormatter={v => `$${Number(v).toFixed(2)}`} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={{ color:C.text.secondary }} formatter={(v, n) => n==="price" ? [`$${Number(v).toFixed(2)}`, "Price"] : [v, n]} labelFormatter={xTickFormatter} />
                 <Line type="monotone" dataKey="price" stroke={C.accent} dot={<CustomPriceDot />} strokeWidth={2} connectNulls name="price" />
               </ComposedChart>
