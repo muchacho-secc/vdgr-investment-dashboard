@@ -650,6 +650,18 @@ function TodayTab() {
     return signalDateStr === lastTradingDayStr;
   }
 
+  // Get the action text for a fresh signal (considers market hours)
+  function getSignalActionText(signalDate) {
+    if (!isSignalFreshToday(signalDate)) return null;
+
+    const now = new Date();
+    const aedtNow = new Date(now.toLocaleString("en-US", { timeZone: "Australia/Sydney" }));
+    const hour = aedtNow.getHours();
+
+    // Market closes at 4pm AEDT
+    return hour >= 16 ? "Buy next trading day" : "Buy today";
+  }
+
   const dateStr = new Date().toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
 
   if (loading) return (
@@ -816,11 +828,14 @@ function TodayTab() {
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
               <div style={{ fontSize:11, color:C.text.secondary, lineHeight:1.4 }}>
-                {signal?.date && isSignalFreshToday(signal.date) ? (
-                  <>Based on {fmt.date(signal.date)} close · Buy today</>
-                ) : (
-                  <>Signal from {signal ? fmt.date(signal.date) : "—"}</>
-                )}
+                {(() => {
+                  const actionText = signal?.date ? getSignalActionText(signal.date) : null;
+                  return actionText ? (
+                    <>Based on {fmt.date(signal.date)} close · {actionText}</>
+                  ) : (
+                    <>Signal from {signal ? fmt.date(signal.date) : "—"}</>
+                  );
+                })()}
               </div>
               <div style={{ fontSize:10, color:C.text.muted, lineHeight:1.3 }}>
                 Next signal update: {getNextUpdateTime()}, 8am AEDT
