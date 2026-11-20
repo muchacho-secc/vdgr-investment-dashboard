@@ -2,3 +2,11 @@ credentials.json
 __pycache__/
 *.pyc
 .env
+
+# Build output and dependencies
+dist/
+node_modules/
+
+# Local development files
+.wrangler/
+.claude/settings.local.json
