@@ -605,13 +605,12 @@ function TodayTab() {
     return days > 0 ? `Markets quiet · ${days} days since last signal` : "Markets quiet";
   }
 
-  // Calculate next update time (8am AEDT weekday)
-  function getNextUpdate(signalDate) {
+  // Calculate next buy time (next trading day 8am AEDT)
+  function getNextBuyTime(signalDate) {
     if (!signalDate) return null;
     const now = new Date();
     // Convert current time to AEDT (UTC+10)
     const aedtNow = new Date(now.toLocaleString("en-US", { timeZone: "Australia/Sydney" }));
-    const currentHour = aedtNow.getHours();
 
     // Start from tomorrow (since update runs at 8am and by the time users see it, it's already happened)
     let next = new Date(aedtNow);
@@ -623,13 +622,7 @@ function TodayTab() {
       next.setDate(next.getDate() + 1);
     }
 
-    // Calculate days difference
-    const today = new Date(aedtNow.getFullYear(), aedtNow.getMonth(), aedtNow.getDate());
-    const nextDay = new Date(next.getFullYear(), next.getMonth(), next.getDate());
-    const diffDays = Math.round((nextDay - today) / 86400000);
-
-    if (diffDays === 1) return "Tomorrow 8am AEDT";
-    return next.toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" }) + " 8am AEDT";
+    return next.toLocaleDateString("en-AU", { day:"numeric", month:"short" });
   }
 
   const dateStr = new Date().toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
@@ -671,24 +664,28 @@ function TodayTab() {
           {/* Compact signal banner */}
           <div style={{
             display:"flex",
-            alignItems:"center",
+            flexDirection:"column",
             gap:10,
-            padding:"10px 14px",
-            background:"#141414",
-            border:"1px solid #252525",
+            padding:"14px 16px",
+            background:"#1C1C1C",
+            border:`1px solid ${tier === "NONE" ? "#252525" : signalColor+"20"}`,
+            borderLeft:`3px solid ${signalColor}`,
             borderRadius:8,
-            marginBottom:12
+            marginBottom:12,
+            minHeight:80
           }}>
-            <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:24, fontWeight:800, color:C.text.muted }}>
-              {daysSinceSignal}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div style={{ display:"inline-flex", alignItems:"center", padding:"4px 12px", borderRadius:999, background:"transparent", border:`1px solid ${signalColor}` }}>
+                <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:800, letterSpacing:1.5, color:signalColor }}>
+                  {tier === "NONE" ? "NO SIGNAL" : tier}
+                </span>
+              </div>
+              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:20, color:C.text.muted, fontWeight:500 }}>
+                —
+              </div>
             </div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, color:C.text.secondary }}>
-                {daysSinceSignal === 1 ? "day calm" : "days calm"} · <span style={{ color:signalColor, fontWeight:600 }}>{tier}</span> · No investment today
-              </div>
-              <div style={{ fontSize:10, color:C.text.muted, marginTop:2 }}>
-                Based on {signal ? fmt.date(signal.date) : "—"} close
-              </div>
+            <div style={{ fontSize:11, color:C.text.muted, lineHeight:1.4 }}>
+              Based on {signal ? fmt.date(signal.date) : "—"} close · Last signal {daysSinceSignal} {daysSinceSignal === 1 ? "day" : "days"} ago
             </div>
           </div>
 
@@ -762,42 +759,38 @@ function TodayTab() {
           )}
         </>
       ) : (
-        /* MEDIUM/HIGH/EXTREME STATE: Keep prominent hero, indicators moved up, commentary expanded */
+        /* MEDIUM/HIGH/EXTREME STATE: Compact banner, indicators moved up, commentary expanded */
         <>
-          {/* Large signal hero - kept prominent */}
-          <div style={{ marginBottom:4 }}>
-            <div className="card" style={{ padding:"20px 16px", marginBottom:12, border:`1px solid ${signalColor+"40"}`, maxHeight:160 }}>
-              <div style={{ display:"flex", gap:16, alignItems:"center", minHeight:120 }}>
-                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-                  <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:56, fontWeight:800, color:C.text.primary, lineHeight:1 }}>
-                    —
-                  </div>
-                  <div style={{ fontSize:11, color:C.text.muted, marginTop:6, textAlign:"center" }}>
-                    Signal active
-                  </div>
-                </div>
-
-                <div style={{ width:1, height:100, background:"#252525" }} />
-
-                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:6 }}>
-                  <SignalBadge signal={tier} />
-                  <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18, fontWeight:700, color:signalColor }}>
-                    {fmt.aud(signal.recommended_amount)}
-                  </div>
-                  <div style={{ fontSize:10, color:C.text.muted, textAlign:"center" }}>
-                    Based on {signal ? fmt.date(signal.date) : "—"} close
-                  </div>
-                  {signal?.date && (
-                    <div style={{ fontSize:9, color:C.text.muted, textAlign:"center", maxWidth:"140px", lineHeight:1.3 }}>
-                      {getNextUpdate(signal.date)}
-                    </div>
-                  )}
-                </div>
+          {/* Compact signal banner */}
+          <div style={{
+            display:"flex",
+            flexDirection:"column",
+            gap:10,
+            padding:"14px 16px",
+            background:"#1C1C1C",
+            border:`1px solid ${signalColor}30`,
+            borderLeft:`3px solid ${signalColor}`,
+            borderRadius:8,
+            marginBottom:12,
+            minHeight:80
+          }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div style={{ display:"inline-flex", alignItems:"center", padding:"4px 12px", borderRadius:999, background:"transparent", border:`1px solid ${signalColor}` }}>
+                <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:800, letterSpacing:1.5, color:signalColor }}>
+                  {tier}
+                </span>
+              </div>
+              <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:24, color:signalColor, fontWeight:700 }}>
+                {fmt.aud(signal.recommended_amount)}
               </div>
             </div>
+            <div style={{ fontSize:11, color:C.text.muted, lineHeight:1.4 }}>
+              Based on {signal ? fmt.date(signal.date) : "—"} close · Buy {signal?.date ? getNextBuyTime(signal.date) : "—"}, 8am AEDT
+            </div>
+          </div>
 
-            {/* P&L strip */}
-            {perf ? (
+          {/* P&L strip */}
+          {perf ? (
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:1, background:"#252525", borderRadius:10, overflow:"hidden", marginBottom:12 }}>
                 {[
                   { label:"Invested", value: fmt.aud(perf.totalInvested), color: C.text.primary },
@@ -815,7 +808,6 @@ function TodayTab() {
                 Log your first investment in Ledger to see P&L here
               </div>
             )}
-          </div>
 
           {/* Indicators row - moved up */}
           {signal && <SignalJourney rsi={rsi} vix={vix} drawdown={drawdown} overallTier={signal.signal_tier} />}
