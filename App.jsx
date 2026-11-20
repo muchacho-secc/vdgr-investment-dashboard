@@ -605,11 +605,9 @@ function TodayTab() {
     return days > 0 ? `Markets quiet · ${days} days since last signal` : "Markets quiet";
   }
 
-  // Calculate next buy time (next trading day 8am AEDT)
-  function getNextBuyTime(signalDate) {
-    if (!signalDate) return null;
+  // Calculate when next cron update runs (next trading day 8am AEDT)
+  function getNextUpdateTime() {
     const now = new Date();
-    // Convert current time to AEDT (UTC+10)
     const aedtNow = new Date(now.toLocaleString("en-US", { timeZone: "Australia/Sydney" }));
 
     // Start from tomorrow (since update runs at 8am and by the time users see it, it's already happened)
@@ -622,7 +620,34 @@ function TodayTab() {
       next.setDate(next.getDate() + 1);
     }
 
-    return next.toLocaleDateString("en-AU", { day:"numeric", month:"short" });
+    return next.toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
+  }
+
+  // Check if signal is fresh (from today's cron run = yesterday's close)
+  function isSignalFreshToday(signalDate) {
+    if (!signalDate) return false;
+    const now = new Date();
+    const aedtNow = new Date(now.toLocaleString("en-US", { timeZone: "Australia/Sydney" }));
+    const todayDay = aedtNow.getDay(); // 0=Sun, 6=Sat
+
+    // Weekend: market closed, not fresh for buying
+    if (todayDay === 0 || todayDay === 6) return false;
+
+    // Get the last trading day (yesterday, or Friday if today is Monday)
+    const lastTradingDay = new Date(aedtNow);
+    if (todayDay === 1) {
+      // Monday: last trading day was Friday
+      lastTradingDay.setDate(lastTradingDay.getDate() - 3);
+    } else {
+      // Tue-Fri: last trading day was yesterday
+      lastTradingDay.setDate(lastTradingDay.getDate() - 1);
+    }
+
+    // Compare dates (YYYY-MM-DD)
+    const signalDateStr = new Date(signalDate).toISOString().split('T')[0];
+    const lastTradingDayStr = lastTradingDay.toISOString().split('T')[0];
+
+    return signalDateStr === lastTradingDayStr;
   }
 
   const dateStr = new Date().toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
@@ -665,7 +690,7 @@ function TodayTab() {
           <div style={{
             display:"flex",
             flexDirection:"column",
-            gap:10,
+            gap:8,
             padding:"14px 16px",
             background:"#1C1C1C",
             border:`1px solid ${tier === "NONE" ? "#252525" : signalColor+"20"}`,
@@ -684,8 +709,13 @@ function TodayTab() {
                 —
               </div>
             </div>
-            <div style={{ fontSize:11, color:C.text.muted, lineHeight:1.4 }}>
-              Based on {signal ? fmt.date(signal.date) : "—"} close · Last signal {daysSinceSignal} {daysSinceSignal === 1 ? "day" : "days"} ago
+            <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+              <div style={{ fontSize:11, color:C.text.secondary, lineHeight:1.4 }}>
+                Last signal {daysSinceSignal} {daysSinceSignal === 1 ? "day" : "days"} ago
+              </div>
+              <div style={{ fontSize:10, color:C.text.muted, lineHeight:1.3 }}>
+                Next signal update: {getNextUpdateTime()}, 8am AEDT
+              </div>
             </div>
           </div>
 
@@ -765,7 +795,7 @@ function TodayTab() {
           <div style={{
             display:"flex",
             flexDirection:"column",
-            gap:10,
+            gap:8,
             padding:"14px 16px",
             background:"#1C1C1C",
             border:`1px solid ${signalColor}30`,
@@ -784,8 +814,17 @@ function TodayTab() {
                 {fmt.aud(signal.recommended_amount)}
               </div>
             </div>
-            <div style={{ fontSize:11, color:C.text.muted, lineHeight:1.4 }}>
-              Based on {signal ? fmt.date(signal.date) : "—"} close · Buy {signal?.date ? getNextBuyTime(signal.date) : "—"}, 8am AEDT
+            <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+              <div style={{ fontSize:11, color:C.text.secondary, lineHeight:1.4 }}>
+                {signal?.date && isSignalFreshToday(signal.date) ? (
+                  <>Based on {fmt.date(signal.date)} close · Buy today</>
+                ) : (
+                  <>Signal from {signal ? fmt.date(signal.date) : "—"}</>
+                )}
+              </div>
+              <div style={{ fontSize:10, color:C.text.muted, lineHeight:1.3 }}>
+                Next signal update: {getNextUpdateTime()}, 8am AEDT
+              </div>
             </div>
           </div>
 
