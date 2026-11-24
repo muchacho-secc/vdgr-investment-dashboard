@@ -4,6 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, Scatter
 } from "recharts";
+import { isSignalFreshToday } from "./signalFreshness.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const WORKER_URL = "https://vdgr-signal-worker.b2mucoach.workers.dev";
@@ -621,33 +622,6 @@ function TodayTab() {
     }
 
     return next.toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short" });
-  }
-
-  // Check if signal is fresh (from today's cron run = yesterday's close)
-  function isSignalFreshToday(signalDate) {
-    if (!signalDate) return false;
-    const now = new Date();
-    const aedtNow = new Date(now.toLocaleString("en-US", { timeZone: "Australia/Sydney" }));
-    const todayDay = aedtNow.getDay(); // 0=Sun, 6=Sat
-
-    // Weekend: market closed, not fresh for buying
-    if (todayDay === 0 || todayDay === 6) return false;
-
-    // Get the last trading day (yesterday, or Friday if today is Monday)
-    const lastTradingDay = new Date(aedtNow);
-    if (todayDay === 1) {
-      // Monday: last trading day was Friday
-      lastTradingDay.setDate(lastTradingDay.getDate() - 3);
-    } else {
-      // Tue-Fri: last trading day was yesterday
-      lastTradingDay.setDate(lastTradingDay.getDate() - 1);
-    }
-
-    // Compare dates (YYYY-MM-DD)
-    const signalDateStr = new Date(signalDate).toISOString().split('T')[0];
-    const lastTradingDayStr = lastTradingDay.toISOString().split('T')[0];
-
-    return signalDateStr === lastTradingDayStr;
   }
 
   // Get the action text for a fresh signal (considers market hours)
